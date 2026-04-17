@@ -1,0 +1,48 @@
+{
+  "name": "quocduyapp",
+  "owner": {
+    "name": "Nguyen Thong",
+    "email": "nguyenthong@example.com"
+  },
+  "metadata": {
+    "description": "Dependency management skills for Claude Code — audit outdated deps and execute safe one-by-one updates across any language",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "quocduyapp",
+      "source": "./",
+      "description": "Dependency management skills for Claude Code — audit outdated dependencies and execute safe one-by-one updates with confirmation, baseline, and rollback across Node.js, PHP, Python, Go, Rust, Java, C#, Ruby, and React Native",
+      "version": "1.0.0",
+      "author": {
+        "name": "Nguyen Thong",
+        "email": "nguyenthong@example.com"
+      },
+      "homepage": "https://github.com/NguyenThong251/quocduyapp-plugin",
+      "repository": "https://github.com/NguyenThong251/quocduyapp-plugin",
+      "license": "MIT",
+      "keywords": [
+        "dependency-management",
+        "claude-code",
+        "plugin",
+        "outdated",
+        "update",
+        "audit",
+        "nodejs",
+        "php",
+        "python",
+        "go",
+        "rust"
+      ],
+      "category": "workflow",
+      "tags": [
+        "dependency-management",
+        "outdated",
+        "update",
+        "audit",
+        "workflow"
+      ],
+      "strict": false
+    }
+  ]
+}
