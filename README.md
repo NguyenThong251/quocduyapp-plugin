@@ -1,73 +1,66 @@
-# QuocDuyApp — Claude Code Plugin
+# quocduyapp-plugin
 
-Dependency management và code quality skills cho hệ sinh thái QuocDuyApp.
+Dependency management skills for Claude Code.
 
 ## Skills
 
 ### `/qd-outdated`
 
-Kiểm tra tất cả thư viện outdated trong project, dùng cho bất kỳ ngôn ngữ nào:
+Check outdated dependencies across any language and generate a risk-classified report.
 
-```bash
-/qd-outdated
 ```
-
-**Supported:**
-- Node.js / React / React Native (yarn, npm, pnpm)
-- PHP (Composer)
-- Python (pip, Poetry)
-- Go (go get)
-- Rust (cargo)
-- Java (Maven, Gradle)
-- C# / .NET (dotnet)
-- Ruby (bundler)
-
-**Output:** `DEPENDENCY-REPORT.md` với risk classification
+Supported: Node.js, PHP, Python, Go, Rust, Java, C#, Ruby, React Native
+Output: DEPENDENCY-REPORT.md
+```
 
 ### `/qd-update`
 
-Thực thi update an toàn, từng thư viện một:
+Execute safe, one-by-one dependency updates with baseline and verification.
 
-```bash
-/qd-update react
 ```
-
-**Pre-requisite:** Chạy `/qd-outdated` trước
-
-**Workflow:**
-1. Audit → 2. Classify → 3. Baseline → 4. Update ONE → 5. Verify → 6. Deploy
+Workflow: Audit → Classify → Baseline → Update ONE → Verify → Deploy
+Pre-requisite: Run /qd-outdated first
+```
 
 ## Install
 
 ```bash
-# Clone repo
-git clone <repo-url> quocduyapp
-
-# Copy vào Claude plugins folder
-cp -r quocduyapp ~/.claude/plugins/
-
-# Restart Claude Code
+/plugin marketplace add https://github.com/NguyenThong251/quocduyapp-plugin
+/plugin install quocduyapp@quocduyapp
 ```
 
 ## Quick Start
 
 ```bash
-# 1. Audit dependencies
+# 1. Audit all dependencies
 /qd-outdated
 
 # 2. Review DEPENDENCY-REPORT.md
 
-# 3. Update từng package một
+# 3. Update each package one at a time
 /qd-update react
 /qd-update antd
 ```
 
+## Supported Languages
+
+| Language | Package Manager |
+|----------|----------------|
+| Node.js / React | yarn, npm, pnpm |
+| PHP | Composer |
+| Python | pip, Poetry |
+| Go | go |
+| Rust | cargo |
+| Java | Maven, Gradle |
+| C# / .NET | dotnet |
+| Ruby | bundler |
+
 ## Rules
 
-- ✅ Language-agnostic
-- ✅ One library at a time
-- ✅ Always create baseline
-- ✅ Always verify before commit
+- One library at a time
+- Always create baseline before updating
+- Always verify (build + test + bundle size)
+- Classify risk: Critical / Minor / Major
 
 ## License
 
