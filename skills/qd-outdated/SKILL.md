@@ -324,6 +324,169 @@ npx <package>-codemod --help 2>/dev/null
 
 ---
 
+## Phase 6.5: Source Code Analysis (MANDATORY)
+
+**TRƯỚC KHI KẾT LUẬN, phải đọc thực tế source code để đánh giá impact:**
+
+### Step 6.5.1: Scan Usage in Codebase
+
+```bash
+# 1. Tìm tất cả imports/requires của package
+echo "=== SCANNING USAGE: [package] ==="
+
+# Node.js / JS / TS
+grep -rn "from ['\"]<package>['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l
+grep -rn "require.*['\"]<package>['\"]" --include="*.js" --include="*.ts" 2>/dev/null | wc -l
+
+# Vue
+grep -rn "from ['\"]<package>['\"]" --include="*.vue" 2>/dev/null | wc -l
+
+# PHP
+grep -rn "use <package>" --include="*.php" 2>/dev/null | wc -l
+
+# Python
+grep -rn "import <package>" --include="*.py" 2>/dev/null | wc -l
+```
+
+### Step 6.5.2: Analyze Usage Patterns
+
+```bash
+# 2. List tất cả files sử dụng package
+echo "=== FILES USING [package] ==="
+grep -rln "from ['\"]<package>['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null
+
+# 3. Xem chi tiết cách sử dụng (import patterns)
+echo "=== IMPORT PATTERNS ==="
+grep -rn "from ['\"]<package>['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | head -30
+
+# 4. Kiểm tra named imports cụ thể
+echo "=== NAMED IMPORTS ==="
+grep -rn "import {" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | grep "<package>" | head -20
+```
+
+### Step 6.5.3: Assess Impact on Project
+
+```bash
+# 5. Đếm tổng files trong project
+TOTAL_FILES=$(find . -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" 2>/dev/null | grep -v node_modules | wc -l)
+echo "Total source files: $TOTAL_FILES"
+
+# 6. Tính % impact
+USAGE_COUNT=$(grep -rln "from ['\"]<package>['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l)
+IMPACT_PERCENT=$(echo "scale=2; $USAGE_COUNT * 100 / $TOTAL_FILES" | bc)
+echo "Impact: $IMPACT_PERCENT% of files"
+
+# 7. Kiểm tra devDependencies vs dependencies
+echo "=== DEPENDENCY TYPE ==="
+grep "\"<package>\"" package.json | grep -v devDependencies && echo "→ Production" || echo "→ Dev dependency"
+```
+
+### Step 6.5.4: Find Breaking Changes Impact
+
+```bash
+# 8. Kiểm tra deprecated APIs đang dùng
+echo "=== CHECKING DEPRECATED APIS ==="
+grep -rn "deprecated\|will be removed" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | grep "<package>" | head -10
+
+# 9. Kiểm tra peer dependencies
+echo "=== CHECKING PEER DEPS ==="
+npm view <package>@<new-version> peerDependencies 2>/dev/null
+```
+
+### Step 6.5.5: Generate Impact Report
+
+```markdown
+## 📊 Source Code Impact Report: [package]
+
+**Current:** [v1.x.x] → **Target:** [v2.x.x]
+
+### Usage Statistics
+
+| Metric | Value |
+|--------|-------|
+| Files using this package | [N] / [Total] ([X]%) |
+| Total import statements | [N] |
+| Type | Production / Dev dependency |
+
+### How [package] is Used in This Project
+
+| FILE | USAGE PATTERN |
+|------|---------------|
+| src/components/Button.tsx | import { Button } from 'antd' |
+| src/pages/Home.tsx | import { Layout } from 'antd' |
+| src/utils/helpers.ts | import _ from 'lodash' |
+
+### ⚠️ Breaking Changes Affecting This Project
+
+| API | Status in New | Used In | Migration |
+|-----|---------------|---------|-----------|
+| `oldAPI()` | ❌ REMOVED | file:15 | Use `newAPI()` |
+| `deprecatedFn()` | ⚠️ DEPRECATED | file:23 | Use `[newFn]` |
+
+### Project-Specific Assessment
+
+```markdown
+### ✅ PROS (ƯU ĐIỂM)
+
+1. **Performance** — [details]
+2. **Feature We Need** — [use case]
+3. **Security Fixes** — [CVEs]
+
+### ❌ CONS (NHƯỢC ĐIỂM)
+
+1. **Breaking APIs** — [N] files need changes
+2. **Migration Effort** — [X hours]
+3. **Test Gap** — need more tests for [areas]
+```
+
+### 📈 RECOMMENDATION MATRIX
+
+| Factor | Score (1-5) | Weight | Result |
+|--------|-------------|--------|--------|
+| Benefits (features) | [X] | [W] | [score×weight] |
+| Breaking changes | [X] | [W] | [score×weight] |
+| Effort to migrate | [X] | [W] | [score×weight] |
+| Security urgency | [X] | [W] | [score×weight] |
+| **TOTAL** | | | [sum] |
+```
+
+---
+
+### Step 6.5.6: FINAL VERDICT
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  🔬 SOURCE ANALYSIS: [package] [v1] → [v2]                       ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  📊 IMPACT: [N] files affected ([X]%) | [N] APIs to migrate      ║
+║                                                                      ║
+║  ✅ PROS:                                                          ║
+║  • [Pro 1]                                                         ║
+║  • [Pro 2]                                                         ║
+║                                                                      ║
+║  ❌ CONS:                                                          ║
+║  • [Con 1]                                                         ║
+║  • [Con 2]                                                         ║
+║                                                                      ║
+║  ╔════════════════════════════════════════════════════════════╗   ║
+║  ║  🟢 RECOMMEND: UPGRADE NOW — [brief reason]                 ║   ║
+║  ║  → Run: /qd-update <package>                                ║   ║
+║  ╚════════════════════════════════════════════════════════════╝   ║
+║                                                                      ║
+║  ╔════════════════════════════════════════════════════════════╗   ║
+║  ║  🟡 CAUTION: UPGRADE WITH CARE — [brief reason]            ║   ║
+║  ║  → Follow phased approach, test thoroughly                 ║   ║
+║  ╚════════════════════════════════════════════════════════════╝   ║
+║                                                                      ║
+║  ╔════════════════════════════════════════════════════════════╗   ║
+║  ║  🔴 DEFER/ABANDON — [brief reason]                         ║   ║
+║  ║  → Add to backlog, review in [X months]                    ║   ║
+║  ╚════════════════════════════════════════════════════════════╝   ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Phase 7: Generate CHANGELOG_DEPENDENCY_UPDATE.md
 
 Create a detailed changelog file. This is the CORE output of `/qd-outdated`:
