@@ -164,7 +164,7 @@ Parse output: for each package note current version, wanted version (latest mino
 
 ---
 
-## Phase 5: WebSearch Changelog
+## Phase 5: WebSearch Changelog + Version-by-Version Analysis
 
 **For EACH outdated package**, search:
 
@@ -194,6 +194,104 @@ npm view <package>@latest version 2>/dev/null
 npm view <package> releases --json 2>/dev/null | head -20
 npm view <package> homepage 2>/dev/null
 ```
+
+### Version-by-Version Deep Analysis (MANDATORY for Major Updates)
+
+**KHI gặp major version jump (2+ major versions behind), phải phân tích từng bước:**
+
+```bash
+# 1. Lấy danh sách tất cả versions
+npm view <package> versions --json 2>/dev/null | jq '.[]' | tail -20
+
+# 2. Với mỗi version trong chain, tìm breaking changes
+npm view <package>@<version> description 2>/dev/null
+npm view <package>@<version> peerDependencies 2>/dev/null
+
+# 3. Tìm changelog trên GitHub releases
+echo "https://github.com/<org>/<package>/releases"
+```
+
+**MẪU PHÂN TÍCH CHI TIẾT CHO TỪNG VERSION:**
+
+```markdown
+### [package] Version Chain Analysis
+
+**Current:** [1.x.x] → **Target:** [3.x.x] (2 major jumps)
+
+#### Phase 1: [1.x.x] → [2.x.x]
+- **Released:** [date]
+- **Days since:** [N] days
+- **Changes:**
+  - ✅ NEW: [feature 1] — [giải thích ngắn]
+  - ✅ NEW: [feature 2] — [giải thích ngắn]
+  - ⚠️  DEPRECATED: [API] — sẽ bị xóa ở [version]
+  - 🔴 BREAKING: [API] — cần thay thế bằng [new API]
+  - 🔴 BREAKING: [behavior] — thay đổi từ [old] thành [new]
+- **Migration Required:**
+  1. [Migration step 1]
+  2. [Migration step 2]
+- **Risk:** 🟡 Medium (codemod available)
+- **Test Coverage Needed:** [unit/integration/e2e]
+
+#### Phase 2: [2.x.x] → [3.x.x]
+- **Released:** [date]
+- **Days since:** [N] days
+- **Changes:**
+  - ✅ NEW: [feature 1]
+  - 🔴 BREAKING: [API change]
+  - 🔴 BREAKING: [behavior change]
+  - ⚠️  DEPRECATED: [will be removed in 4.x]
+- **Migration Required:**
+  1. [Migration step 1]
+  2. [Migration step 2]
+  3. [Migration step 3]
+- **Risk:** 🔴 High (no codemod, manual rewrite needed)
+- **Test Coverage Needed:** [full regression]
+
+#### Dependency Chain:
+```
+[1.x.x] requires:
+  - [dep1]@^[version]
+  - [dep2]@^[version]
+
+[2.x.x] requires:
+  - [dep1]@^[new-version]  ← also outdated!
+  - [new-dep]@^[version]    ← NEW dependency
+
+[3.x.x] requires:
+  - [dep1]@^[new-version]
+  - [dep2]@^[new-version]  ← also outdated!
+  - [dep3]@^[version]      ← NEW peer dependency
+```
+```
+
+**ĐÁNH GIÁ TỔNG HỢP:**
+
+```markdown
+### Effort Assessment: [package] [1.x] → [3.x]
+
+| Aspect | Value |
+|--------|-------|
+| Total Phases | 2 |
+| Estimated Time | [X-Y hours] |
+| Codemod Available | [Yes: tool / No] |
+| Risk Level | [Low/Medium/High] |
+| Can Test Incrementally | [Yes/No] |
+| Rollback Possible | [Yes/No] |
+
+### RECOMMENDATION:
+
+**IF** [user priority is safety]:
+  → Follow Phase 1 → Phase 2 with full testing between each
+
+**IF** [user priority is speed]:
+  → Use codemod + batch update + full regression test
+
+**IF** [effort > value]:
+  → Consider DEFER (add to DEPENDENCY-REPORT.md for future review)
+```
+
+---
 
 **Extract for each package:**
 - Latest version number
@@ -354,6 +452,234 @@ Create a detailed changelog file. This is the CORE output of `/qd-outdated`:
 
 4. **Later (P3 — quarterly)**
    - [ ] Patch updates
+
+---
+
+## Update Roadmap with Incremental Phases
+
+**Mỗi major package update CẦN được chia thành từng phase rõ ràng. Đây là roadmap chi tiết:**
+
+### MẪU ROADMAP CHO 1 PACKAGE:
+
+```markdown
+## 🔄 Update Roadmap: [package-name]
+
+**Current:** [1.x.x] | **Target:** [3.x.x]
+**Package Manager:** [yarn/npm/pnpm]
+**Total Phases:** 2
+
+═══════════════════════════════════════════════════════════════════════
+PHASE 1: [1.x.x] → [2.x.x]
+═══════════════════════════════════════════════════════════════════════
+
+📋 OBJECTIVE:
+   Upgrade from [1.x.x] to [2.x.x]
+
+🔧 COMMAND:
+   yarn upgrade <package>@^2.x
+
+📊 WHAT CHANGES:
+   - ✅ NEW: [feature 1] — [giải thích ngắn]
+   - ✅ NEW: [feature 2] — [giải thích ngắn]
+   - 🔴 BREAKING: [old API] → [new API] — [cách migrate]
+   - 🔴 BREAKING: [behavior] — [thay đổi gì]
+   - ⚠️  DEPRECATED: [x] — [sẽ bị xóa ở version nào]
+
+🧪 VERIFY:
+   1. yarn build
+   2. yarn test --run
+   3. yarn lint
+   4. npm run type-check  (nếu có)
+
+⏱️  ESTIMATED TIME: [X hours]
+
+✅ CRITERIA TO PASS:
+   - [ ] Build passed
+   - [ ] All tests passed
+   - [ ] No breaking behavior reported
+   - [ ] Manual smoke test passed
+
+═══════════════════════════════════════════════════════════════════════
+PHASE 2: [2.x.x] → [3.x.x]
+═══════════════════════════════════════════════════════════════════════
+
+📋 OBJECTIVE:
+   Upgrade from [2.x.x] to [3.x.x]
+
+🔧 COMMAND:
+   yarn upgrade <package>@^3.x
+
+📊 WHAT CHANGES:
+   - ✅ NEW: [feature 1]
+   - 🔴 BREAKING: [old API] → [new API]
+   - 🔴 BREAKING: [behavior]
+   - ⚠️  DEPRECATED: [x]
+
+🧪 VERIFY:
+   1. Clean artifacts: rm -rf dist .next tsconfig.tsbuildinfo
+   2. yarn build
+   3. yarn test --run
+   4. Manual smoke test
+
+⏱️  ESTIMATED TIME: [X hours]
+
+✅ CRITERIA TO PASS:
+   - [ ] Build passed
+   - [ ] All tests passed
+   - [ ] Migration steps verified
+   - [ ] Manual smoke test passed
+
+═══════════════════════════════════════════════════════════════════════
+COMMIT STRATEGY
+═══════════════════════════════════════════════════════════════════════
+
+Phase 1 Commit:
+   git add -A
+   git commit -m "chore(deps): upgrade [package] 1.x → 2.x
+
+   Breaking changes fixed:
+   - [x] migrated to [y]
+   - [x] removed, use [y] instead
+
+   Verified: build ✅ tests ✅"
+
+Phase 2 Commit:
+   git add -A
+   git commit -m "chore(deps): upgrade [package] 2.x → 3.x
+
+   Breaking changes fixed:
+   - [x] migrated to [y]
+
+   Verified: build ✅ tests ✅"
+```
+
+---
+
+### TỔNG HỢP ROADMAP CHO TẤT CẢ PACKAGES:
+
+```markdown
+## 📦 Complete Update Roadmap
+
+### Phase 1 Commands (Execute in order)
+
+| Step | Package | Command | Risk | Time |
+|------|---------|---------|------|------|
+| 1.1 | [pkg-A] | `yarn upgrade pkg-a@^2.x` | 🟢 Low | 15min |
+| 1.2 | [pkg-B] | `yarn upgrade pkg-b@^3.x` | 🟡 Medium | 30min |
+| 1.3 | [pkg-C] | `yarn upgrade pkg-c@^4.x` | 🔴 High | 2h |
+
+### Phase 2 Commands (Execute after Phase 1)
+
+| Step | Package | Command | Risk | Time |
+|------|---------|---------|------|------|
+| 2.1 | [pkg-B] | `yarn upgrade pkg-b@^3.x → ^4.x` | 🔴 High | 1h |
+| 2.2 | [pkg-C] | `yarn upgrade pkg-c@^4.x → ^5.x` | 🔴 High | 2h |
+
+### Execution Summary:
+
+```
+Week 1: P0 Security Updates
+  /qd-update [security-package-1]
+  /qd-update [security-package-2]
+
+Week 2: P1 Major Updates (Low Risk)
+  /qd-update [pkg-A]
+  → Commit after verify
+
+Week 3: P1 Major Updates (Medium Risk)
+  /qd-update [pkg-B]
+  → Phase 1 only, assess before Phase 2
+
+Week 4: P1 Major Updates (High Risk)
+  /qd-update [pkg-C]
+  → Paradigm shift? Consider ABANDON/PROCEED/DEFER
+  → Run /qd-update with --phased flag
+```
+
+---
+
+### QUICK REFERENCE: Run Commands
+
+**Parallel Safe (can run together):**
+```bash
+# P0: Security
+yarn upgrade <sec-pkg-1>@latest
+yarn upgrade <sec-pkg-2>@latest
+```
+
+**Sequential Required (wait for previous to verify):**
+```bash
+# Major updates — MUST verify each before next
+yarn upgrade <pkg-A>@^2.x
+# → Verify → Commit
+yarn upgrade <pkg-B>@^3.x
+# → Verify → Commit
+```
+
+**DEFER (add to backlog):**
+```bash
+echo "## DEFERRED: [pkg] [v1] → [v2]
+- Reason: [paradigm shift / effort > value]
+- Review after: [date]
+" >> DEPENDENCY-REPORT.md
+```
+
+---
+
+### LINK VỚI /qd-update:
+
+**Từ `/qd-outdated`, sau khi generate roadmap:**
+
+```
+═══════════════════════════════════════════════════════════════════════
+  📋 UPDATE ROADMAP READY
+═══════════════════════════════════════════════════════════════════════
+
+  CHANGELOG saved: CHANGELOG_DEPENDENCY_UPDATE.md
+  ROADMAP saved: UPDATE-ROADMAP.md (tự động tạo)
+
+  ĐỂ BẮT ĐẦU UPDATE:
+  ────────────────────────────────────────────────────────────────────
+
+  P0 (Security — Làm ngay):
+    /qd-update <security-package>
+
+  P1 (Major Updates — Theo roadmap):
+    /qd-update <pkg-A>   # Phase 1 → [1.x] → [2.x]
+    /qd-update <pkg-B>   # Phase 1 → [2.x] → [3.x]
+
+  XEM CHI TIẾT:
+    cat CHANGELOG_DEPENDENCY_UPDATE.md
+    cat UPDATE-ROADMAP.md
+
+═══════════════════════════════════════════════════════════════════════
+```
+
+**Tự động tạo UPDATE-ROADMAP.md:**
+
+```bash
+# Tạo file roadmap chi tiết
+cat > UPDATE-ROADMAP.md << 'EOF'
+# Update Roadmap — Generated $(date)
+
+## Quick Start
+
+```bash
+# Week 1: Security
+/qd-update <security-pkg>
+
+# Week 2: Safe major
+/qd-update <pkg-A>
+
+# Week 3: Medium major
+/qd-update <pkg-B>
+
+# Week 4: High risk major
+/qd-update <pkg-C>
+# → Sẽ có prompt: OPTION A (UNDO) / OPTION B (PROCEED) / OPTION C (DEFER)
+```
+EOF
+```
 
 ---
 
