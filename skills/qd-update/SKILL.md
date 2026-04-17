@@ -424,11 +424,266 @@ echo "Fix issues before retrying."
 
 ---
 
-## Phase 6: Major Version Strategy
+## Phase 6: Major Version Strategy (Multi-Step with Auto-Assessment)
 
-**When needed:** Major version jump with breaking changes
+**When needed:** Major version jump (1.x → 2.x) or 2+ versions behind
 
-### Strategy A: Codemod (PREFERRED)
+---
+
+### Workflow for Major Updates
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  MAJOR UPDATE: [package] [1.x] → [2.x]                    │
+│                                                              │
+│  Step 1: Create baseline (snapshot, tests, branch)          │
+│       ↓                                                      │
+│  Step 2: Update to intermediate version (if 2+ major)        │
+│       ↓                                                      │
+│  AUTO-ASSESS: Compare old vs new code                       │
+│  • What changed?                                              │
+│  • UI/Performance impact?                                    │
+│  • Breaking changes?                                          │
+│       ↓                                                      │
+│  Step 3: Show assessment to user                             │
+│       ↓                                                      │
+│  USER CONFIRM: "Accept these changes?"                      │
+│       ↓                              ↓                       │
+│     YES → Continue               NO → ROLLBACK               │
+│       ↓                              ↓                       │
+│  Step 4: Fix breaking changes    Restore old code           │
+│       ↓                              ↓                       │
+│  Step 5: Verify + Commit         Restore old version       │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Step 1: Baseline Snapshot
+
+**Tạo baseline chi tiết:**
+
+```bash
+# 1. Git snapshot trước khi thay đổi
+git add -A
+git commit -m "BASELINE: before <package> major update"
+BASELINE_COMMIT=$(git rev-parse HEAD)
+
+# 2. Lưu trạng thái hiện tại
+cat package.json | grep '"<package>"' > baseline-<package>.txt
+yarn outdated | grep "<package>" >> baseline-<package>.txt
+
+# 3. Build baseline
+yarn build 2>&1 | tee build-baseline.log
+BUNDLE_BEFORE=$(cat build-baseline.log | grep -oE '[0-9]+\.[0-9]+ KB' | head -1)
+
+# 4. Screenshot UI baseline (frontend)
+# Chạy dev server và chụp các trang chính
+yarn dev &
+sleep 5
+```
+
+---
+
+### Step 2: Incremental Update (nếu 2+ major versions behind)
+
+**Nếu package 2+ major versions behind:**
+
+```
+⚠️  INCREMENTAL UPDATE REQUIRED
+
+[package] is [N] major versions behind:
+  Current: [1.x.x]
+  Target:  [3.x.x]
+
+Recommended path:
+  Step 1: [1.x.x] → [2.x.x] (intermediate)
+  Step 2: [2.x.x] → [3.x.x] (final)
+
+Each step will:
+  1. Update package
+  2. Show what changed (old vs new)
+  3. Auto-assess UI/performance impact
+  4. Ask you to confirm
+  5. Rollback if you reject
+```
+
+**Thực thi từng bước:**
+
+```bash
+# Step 1: Update to intermediate version
+yarn upgrade <package>@^2.x
+
+# Commit intermediate
+git add -A
+git commit -m "INTERIM: <package> [1.x] → [2.x]"
+```
+
+---
+
+### Step 3: AUTO-ASSESS — Compare Old vs New
+
+**Sau mỗi update, tự động phân tích:**
+
+```bash
+# 1. So sánh package versions
+echo "=== VERSION CHANGE ==="
+cat package.json | grep '"<package>"'
+echo "---"
+cat baseline-<package>.txt
+
+# 2. So sánh bundle size
+echo "=== BUNDLE SIZE ==="
+echo "Before: $BUNDLE_BEFORE"
+yarn build 2>&1 | tee build-after.log
+BUNDLE_AFTER=$(cat build-after.log | grep -oE '[0-9]+\.[0-9]+ KB' | head -1)
+echo "After: $BUNDLE_AFTER"
+BUNDLE_CHANGE=$(echo "scale=2; ($BUNDLE_AFTER - $BUNDLE_BEFORE) / $BUNDLE_BEFORE * 100" | bc)
+echo "Change: $BUNDLE_CHANGE%"
+
+# 3. Xem code changes
+echo "=== CODE CHANGES ==="
+git diff src/ --stat | head -20
+
+# 4. Tìm breaking changes trong imports
+grep -rn "from ['\"]<package>['\"]" src/ --include="*.js" --include="*.jsx" | head -20
+
+# 5. Check deprecated API usage
+git diff src/ | grep -E "DEPRECATED|deprecated|will be removed" || echo "No deprecation warnings"
+```
+
+**Tự động đánh giá impact:**
+
+```markdown
+## AUTO-ASSESSMENT: <package> [v1] → [v2]
+
+### Version Change
+- Old: [v1.x.x]
+- New: [v2.x.x]
+
+### Bundle Size Impact
+- Before: [X KB]
+- After: [Y KB]
+- Change: [+/- Z%]
+- Status: ✅ OK (< 10%) | ⚠️ WARNING (> 10%)
+
+### Code Changes
+- Files changed: [N]
+- Lines added: [N]
+- Lines removed: [N]
+
+### Breaking Changes Detected
+- [Breaking change 1]
+- [Breaking change 2]
+
+### UI/Performance Impact
+- [Impact assessment]
+
+### Risk Level
+- 🔴 HIGH: Breaking changes detected
+- 🟡 MEDIUM: Bundle size increased > 10%
+- 🟢 LOW: Minor changes, no breaking API
+```
+
+---
+
+### Step 4: USER CONFIRMATION
+
+**Sau khi assess, hiển thị cho user:**
+
+```
+═══════════════════════════════════════════════════════════════
+  AUTO-ASSESSMENT COMPLETE: <package> [v1] → [v2]
+═══════════════════════════════════════════════════════════════
+
+📦 Bundle Impact:    [X KB] → [Y KB] ([+/-Z%])
+📁 Files Changed:    [N] files
+⚠️  Breaking APIs:   [N] detected
+🔧 Code Fixes Needed: [Y] locations
+
+───────────────────────────────────────────────────────────────
+
+CHANGES SUMMARY:
+[Bullet list of key changes]
+
+───────────────────────────────────────────────────────────────
+
+DO YOU ACCEPT THESE CHANGES?
+
+  ✅ YES — Accept and continue
+     Type: "yes" or "yes --fix" (auto-fix breaking changes)
+
+  ❌ NO — Reject and rollback
+     Type: "no" or "rollback"
+
+  🔍 SHOW DETAILS — See full diff
+     Type: "diff" to see code changes
+
+═══════════════════════════════════════════════════════════════
+```
+
+---
+
+### Step 5: ACCEPT → Fix + Continue
+
+**Nếu user accept:**
+
+```bash
+# 1. Apply codemod nếu có
+npx <package>-codemod <transform> src/ 2>/dev/null || echo "No codemod available"
+
+# 2. Fix breaking changes manually
+# Tìm và fix các deprecated APIs
+grep -rn "deprecated\|will be removed" src/ --include="*.js" 2>/dev/null | head -20
+
+# 3. Build lại
+yarn build
+
+# 4. Test
+yarn test --run
+
+# 5. Commit
+git add -A
+git commit -m "feat(deps): upgrade <package> from <v1> to <v2>
+
+Breaking changes fixed:
+- [Fix 1]
+- [Fix 2]
+
+Bundle impact: $BUNDLE_CHANGE%"
+```
+
+---
+
+### Step 5: REJECT → ROLLBACK
+
+**Nếu user reject (type "no" hoặc "rollback"):**
+
+```bash
+# 1. Khôi phục code
+git checkout -- src/ package.json yarn.lock
+
+# 2. Checkout baseline commit
+git checkout $BASELINE_COMMIT -- src/ package.json yarn.lock
+
+# 3. Reinstall
+yarn install
+
+# 4. Verify rollback
+yarn outdated | grep "<package>"
+# Phải show version cũ
+
+# 5. Xóa baseline file
+rm baseline-<package>.txt build-baseline.log 2>/dev/null
+
+# 6. Report
+echo "⚠️  ROLLED BACK: <package> reverted to [v1.x.x]"
+echo "Reason: User rejected changes"
+```
+
+---
+
+### Strategy A: Codemod (PREFERRED for auto-fix)
 
 ```bash
 # Search for official codemod
