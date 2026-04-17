@@ -351,6 +351,61 @@ git diff yarn.lock | head -50
 
 ## Phase 5: Verify
 
+### Step 5.0: Clean Old Artifacts (MANDATORY)
+
+**TRƯỚC KHI BUILD, phải clean toàn bộ artifact cũ để đảm bảo build thực sự dùng code mới:**
+
+```bash
+# Xác định loại project và clean đúng artifact
+echo "=== CLEANING OLD ARTIFACTS ==="
+
+# Common build caches
+rm -rf node_modules/.cache 2>/dev/null
+rm -rf .next 2>/dev/null
+rm -rf dist 2>/dev/null
+rm -rf .nuxt 2>/dev/null
+rm -rf .output 2>/dev/null
+rm -rf .astro 2>/dev/null
+rm -rf .svelte-kit 2>/dev/null
+
+# Tìm và xóa các .module file (CSS modules cache)
+find . -name "*.module.css" -o -name "*.module.scss" -o -name "*.module.sass" 2>/dev/null | head -5
+find . -path "*/node_modules/.vite" -type d 2>/dev/null | xargs rm -rf 2>/dev/null
+find . -path "*/node_modules/.cache" -type d 2>/dev/null | xargs rm -rf 2>/dev/null
+
+# TypeScript build cache
+rm -rf tsconfig.tsbuildinfo 2>/dev/null
+rm -rf *.tsbuildinfo 2>/dev/null
+
+# ESLint / TSC cache
+rm -rf .eslintcache 2>/dev/null
+rm -rf .tscache 2>/dev/null
+
+# Fallback: chỉ xóa dist nếu là Node.js backend không có frontend cache
+if [ ! -d "src" ] && [ ! -d "app" ]; then
+  echo "Backend-only project: skipping frontend caches"
+fi
+
+# Kiểm tra đã clean chưa
+echo "=== VERIFY CLEAN ==="
+ls -la dist .next .nuxt .output 2>/dev/null || echo "All clean."
+
+# IMPORTANT: Nếu project dùng PNPM hoặc workspace, clean hoàn toàn
+if [ -f "pnpm-lock.yaml" ]; then
+  echo "PNPM detected: clean store..."
+  # KHÔNG chạy pnpm store prune vì nó ảnh hưởng global
+  # Chỉ xóa local workspace cache
+fi
+
+echo "=== CLEAN COMPLETE — READY TO BUILD ==="
+```
+
+**TẠI SAO PHẢI CLEAN?**
+- File `.module` cũ có thể chứa CSS mapping từ version cũ → gây lỗi stylesheet không đúng
+- Cache `dist/`, `.next/` chứa compiled code từ version cũ → build lại vẫn dùng cache cũ
+- TypeScript `tsbuildinfo` lưu incremental build state → type errors không được phát hiện
+- Không clean = có thể che giấu lỗi thực sự từ version mới
+
 ### Step 5.1: Build
 
 ```bash
@@ -683,6 +738,145 @@ echo "Reason: User rejected changes"
 
 ---
 
+### Step 5b: ABANDON & REBUILD — Too Many Changes / Paradigm Shift
+
+**KHI NÀO CẦN DÙNG:**
+Sau khi assess xong, nếu phát hiện **QUÁ NHIỀU thay đổi** so với bản cũ — ví dụ:
+- Core API thay đổi hoàn toàn (không phải chỉnh sửa nhỏ)
+- Cần rewrite >50% code liên quan
+- Library thay đổi paradigm (vd: Redux → Zustand, class → hooks, callback → async/await)
+- Migration effort lớn hơn giá trị nhận được
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  🚨 PARADIGM SHIFT DETECTED                                          ║
+║                                                                      ║
+║  [package] [v1] → [v2] có QUÁ NHIỀU thay đổi:                    ║
+║                                                                      ║
+║  📊 ASSESSMENT RESULT:                                               ║
+║  ┌────────────────────────────────────────────────────────────────┐ ║
+║  │ Breaking Changes:        [N] locations                          │ ║
+║  │ Files Affected:         [N] files                              │ ║
+║  │ Estimated Effort:       [X] hours / [Y] days                  │ ║
+║  │ Core Rewrites:          [N] components                        │ ║
+║  │ Migration Risk:         🔴 HIGH                               │ ║
+║  └────────────────────────────────────────────────────────────────┘ ║
+║                                                                      ║
+║  💡 RECOMMENDATION:                                                  ║
+║  Việc upgrade có thể yêu cầu refactor lớn.                     ║
+║  Cân nhắc 2 lựa chọn:                                               ║
+║                                                                      ║
+║  ─────────────────────────────────────────────────────────────────  ║
+║  OPTION A: UNDO & ABANDON ❌                                        ║
+║  ─────────────────────────────────────────────────────────────────  ║
+║  • Giữ nguyên version hiện tại                                      ║
+║  • Rollback hoàn toàn                                               ║
+║  • Đánh dấu: [package]@<current> → SKIP (major upgrade not viable) ║
+║  • Tương lai: Cân nhắc build mới hoàn toàn khi có bandwidth       ║
+║                                                                      ║
+║  ─────────────────────────────────────────────────────────────────  ║
+║  OPTION B: OK & PROCEED ✅                                          ║
+║  ─────────────────────────────────────────────────────────────────  ║
+║  • Chấp nhận refactor lớn                                           ║
+║  • Tiếp tục migration từng bước                                    ║
+║  • Đảm bảo test đầy đủ                                              ║
+║  • Commit rõ ràng từng phase                                        ║
+║                                                                      ║
+║  ─────────────────────────────────────────────────────────────────  ║
+║  OPTION C: DEFER (Tương lai) ⏳                                     ║
+║  ─────────────────────────────────────────────────────────────────  ║
+║  • Bookmark lại, không làm bây giờ                                   ║
+║  • Review lại sau [X] tháng                                          ║
+║  • Cập nhật vào DEPENDENCY-REPORT.md                                ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+**DECISION PROMPT:**
+```
+═══════════════════════════════════════════════════════════════════════
+  YOUR DECISION:
+
+  Type "A" → UNDO & ABANDON (Giữ version cũ, không upgrade)
+  Type "B" → OK & PROCEED (Chấp nhận refactor lớn, tiếp tục)
+  Type "C" → DEFER (Đánh dấu để làm sau)
+  Type "skip" → Cancel and return to package list
+═══════════════════════════════════════════════════════════════════════
+```
+
+**OPTION A: UNDO & ABANDON**
+```bash
+# 1. Rollback to baseline
+git checkout $BASELINE_COMMIT -- src/ package.json yarn.lock
+
+# 2. Reinstall
+yarn install
+
+# 3. Verify version cũ
+yarn outdated | grep "<package>"
+
+# 4. Tạo note trong DEPENDENCY-REPORT.md
+echo "
+## [SKIPPED] [package]@[current] → [target]
+**Date:** $(date)
+**Reason:** Too many breaking changes — paradigm shift
+**Effort Estimate:** [X hours]
+**Recommendation:** Defer to major refactor window
+" >> DEPENDENCY-REPORT.md
+
+# 5. Report
+echo "⚠️  ABANDONED: [package] upgrade postponed"
+echo "Reason: Paradigm shift — requires major rewrite"
+echo "Bookmark added to DEPENDENCY-REPORT.md"
+```
+
+**OPTION B: OK & PROCEED**
+```bash
+# 1. Confirm đã hiểu
+echo "Proceeding with major migration: [package] [v1] → [v2]"
+echo "Breaking changes will be fixed incrementally"
+
+# 2. Tiếp tục với Strategy A/B/C (codemod, incremental, side-by-side)
+
+# 3. Commit with clear message
+git add -A
+git commit -m "chore(deps): proceed with major [package] migration
+
+⚠️  PARADIGM SHIFT — MAJOR REFACTOR REQUIRED
+Breaking changes: [N]
+Files affected: [N]
+Acknowledged by: [user confirmation]
+
+This is a multi-step migration. Breaking changes fixed:
+- [Fix 1]
+- [Fix 2]
+"
+```
+
+**OPTION C: DEFER**
+```bash
+# 1. Rollback
+git checkout $BASELINE_COMMIT -- src/ package.json yarn.lock
+yarn install
+
+# 2. Update DEPENDENCY-REPORT.md với defer note
+cat >> DEPENDENCY-REPORT.md << 'EOF'
+
+### ⏳ DEFERRED: [package] [v1] → [v2]
+- **Deferred Date:** $(date)
+- **Reason:** Paradigm shift — effort > value right now
+- **Effort Estimate:** [X hours]
+- **Review After:** [date + 3 months]
+- **Status:** Pending
+EOF
+
+# 3. Report
+echo "⏳  DEFERRED: [package] upgrade marked for future review"
+echo "Added to DEPENDENCY-REPORT.md"
+```
+
+---
+
 ### Strategy A: Codemod (PREFERRED for auto-fix)
 
 ```bash
@@ -918,11 +1112,101 @@ yarn add react@19.2.4 --exact
 - ❌ **Never** ignore major version jumps
 - ❌ **Never** commit if any verification fails
 - ❌ **Never** big bang update when 2+ major behind
+- ❌ **Never** silently add new dependencies without explicit user confirmation
 - ✅ **Always** confirm with user before updating
 - ✅ **Always** create dedicated branch
 - ✅ **Always** verify (build + test + bundle size)
 - ✅ **Always** rollback if verification fails
 - ✅ **Always** provide rollback strategy
+- ✅ **Always** clean old artifacts (`.next`, `dist`, `*.tsbuildinfo`, `.module`, cache) before rebuild
+
+---
+
+## Library Addition Controls
+
+### CRITICAL: No Automatic Library Addition
+
+**KHI ĐANG UPDATE, nếu phát hiện cần thêm library mới (ví dụ: thiếu peer dependency, build thất bại vì thiếu package):**
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  🚨 LIBRARY ADDITION REQUIRED                                      │
+│                                                                    │
+│  Package:  [package-name]                                          │
+│  Purpose:  [mô tả ngắn gọn tại sao cần thêm]                     │
+│  Problem:  [lỗi cụ thể đang gặp phải - VD: "peer dep missing"]   │
+│                                                                    │
+│  WHAT THIS LIBRARY SOLVES:                                         │
+│  [Giải thích rõ ràng library này giải quyết vấn đề gì]           │
+│  Example: "Solves 'Cannot find module x' error during build"      │
+│  Example: "Required peer dependency of antd v5 — without it,       │
+│           Button component will throw runtime error"               │
+│                                                                    │
+│  RISK: [Low / Medium / High]                                       │
+│  WHY:  [Tại sao mức risk đó]                                      │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**BẮT BUỘC phải làm theo 4 bước:**
+
+```
+Step 1: DỪNG LẠI — Không tự ý add library
+Step 2: HIỂN THỊ thông tin library + vấn đề nó giải quyết + risk level
+Step 3: HỎI CONFIRM từ user:
+          "Tôi phát hiện cần thêm [package]. 
+           Library này giải quyết: [mô tả].
+           Bạn có muốn tôi thêm không? Type 'yes' để xác nhận."
+Step 4: CHỈ THÊM SAU KHI user đồng ý
+```
+
+**KHÔNG ĐƯỢC LÀM:**
+- ❌ Tự ý `yarn add [package]` khi chưa có confirm
+- ❌ Thêm library mà không giải thích tại sao
+- ❌ Thêm library mà không đề cập risk
+- ❌ Thêm nhiều library cùng lúc
+- ❌ Thêm library trùng lặp chức năng với library đã có
+
+**SAU KHI THÊM LIBRARY — VẪN PHẢI VERIFY:**
+```bash
+# Sau khi thêm library, clean lại và build
+rm -rf dist .next tsconfig.tsbuildinfo node_modules/.cache 2>/dev/null
+yarn build
+
+# Nếu build fail → ROLLBACK library đó
+git checkout package.json yarn.lock
+echo "⚠️  Build failed after adding [package] — rolled back"
+```
+
+**VÍ DỤ SCENARIOS:**
+
+Scenario 1 — Peer dependency missing:
+```
+[ERROR] Cannot find module 'styled-components'
+[Context] Updating antd from v4 to v5
+[Analysis] antd v5 requires styled-components as peer dependency
+
+LIBRARY: styled-components
+PURPOSE: Required peer dependency — antd v5 uses it for CSS-in-JS
+RISK: Low (widely used, stable)
+
+⚠️  Cần thêm styled-components để antd v5 hoạt động.
+Bạn có muốn tôi thêm không? Type 'yes' để xác nhận.
+```
+
+Scenario 2 — Build error, muốn thêm polyfill:
+```
+[ERROR] Cannot read properties of undefined (reading 'map')
+[Context] Code uses .map() on potential undefined (new in React 19 strict)
+[SOLUTION] Thêm package như @types hoặc refactor code
+
+⚠️  Tôi không tự ý thêm polyfill library.
+Có 2 lựa chọn:
+  1. Thêm library [name] — giải quyết nhanh nhưng thêm dependency
+  2. Refactor code — không thêm dependency
+
+Bạn muốn cách nào? Type '1' hoặc '2'.
+```
 
 ---
 
