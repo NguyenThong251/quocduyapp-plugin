@@ -530,6 +530,150 @@ PHASE 2: [2.x.x] → [3.x.x]
    - [ ] Manual smoke test passed
 
 ═══════════════════════════════════════════════════════════════════════
+📊 DECISION SUPPORT: NÊN UPGRADE KHÔNG?
+═══════════════════════════════════════════════════════════════════════
+
+**TRƯỚC KHI CHẠY phase, phải đánh giá:**
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  🔍 DECISION CHECK: [package] [v1] → [v2]                        ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+📋 TL;DR — SO SÁNH NHANH:
+
+┌──────────────────────┬─────────────────┬─────────────────┐
+│ Metric               │ Version Cũ      │ Version Mới     │
+├──────────────────────┼─────────────────┼─────────────────┤
+│ Bundle Size (JS)     │ [X] KB          │ [Y] KB          │
+│ Bundle Size (CSS)    │ [X] KB          │ [Y] KB          │
+│ TypeScript Support   │ [Yes/No/Partial]│ [Yes/No/Full]  │
+│ Tree Shaking        │ [Yes/No]        │ [Yes/No]        │
+│ ESM Support         │ [Yes/No]        │ [Yes/No]        │
+│ SSR Compatible      │ [Yes/No]        │ [Yes/No]        │
+│ Performance         │ [Baseline]      │ [+/-X%]         │
+│ Security Fixes      │ [N] CVEs        │ [N] CVEs        │
+│ Breaking APIs       │ —               │ [N] removed      │
+│ New Features        │ —               │ [N] added       │
+│ Deprecated APIs     │ [N]             │ [N]             │
+└──────────────────────┴─────────────────┴─────────────────┘
+
+═══════════════════════════════════════════════════════════════════════
+✅ NÊN UPGRADE NẾU:
+═══════════════════════════════════════════════════════════════════════
+
+  ✓ Security: Có CVE mới — vá lỗ hổng bảo mật
+  ✓ Performance: Cải thiện đáng kể (>10% faster)
+  ✓ Bundle: Giảm kích thước (tree shaking tốt hơn)
+  ✓ Support: Version cũ sắp hết hỗ trợ (EOL)
+  ✓ Compatibility: Tương thích tốt hơn với các library khác
+  ✓ Features: Có feature cần thiết cho roadmap hiện tại
+  ✓ Maintenance: Giảm technical debt đáng kể
+
+═══════════════════════════════════════════════════════════════════════
+⚠️  CÂN NHẮC NẾU:
+═══════════════════════════════════════════════════════════════════════
+
+  ⚠ Breaking APIs > 5 — effort quá lớn so với lợi ích
+  ⚠ Bundle size tăng > 10% — cân nhắc lazy loading
+  ⚠ Peer deps mới — có thể kéo theo nhiều updates khác
+  ⚠ Migration effort > 1 week — cân nhắc defer
+  ⚠ Team size nhỏ — không đủ resource để test kỹ
+  ⚠ Project giai đoạn production — chờ release xong
+
+═══════════════════════════════════════════════════════════════════════
+❌ KHÔNG NÊN UPGRADE NẾU:
+═══════════════════════════════════════════════════════════════════════
+
+  ✗ Không có feature mới cần thiết
+  ✗ Breaking changes quá nhiều, không có codemod
+  ✗ Effort > value (mất 2 tuần cho 1 improvement nhỏ)
+  ✗ Project đang active development — gây conflict
+  ✗ Team không có bandwidth để test regression
+
+═══════════════════════════════════════════════════════════════════════
+💡 LƯU Ý KHI LÀM:
+═══════════════════════════════════════════════════════════════════════
+
+  1. ⏰ THỜI GIAN:
+     - Patch: 15-30 phút
+     - Minor: 30-60 phút + test
+     - Major (1 jump): 1-4 giờ + test + possible codemod
+     - Major (2+ jumps): 1-3 ngày (chia phase)
+
+  2. 🔧 CHỈ SỐ CẦN THEO DÕI:
+     - Build time (before vs after)
+     - Bundle size (JS + CSS)
+     - Test pass rate
+     - Runtime performance
+     - Memory usage
+
+  3. 🚨 RED FLAGS CẦN DỪNG LẠI:
+     - Build fail sau khi đã fix hết breaking changes
+     - Test fail > 10% (tỷ lệ quá cao)
+     - Bundle size tăng > 20%
+     - Regression nghiêm trọng (auth, payment, core flow)
+
+  4. 📝 CHECKLIST TRƯỚC KHI BẮT ĐẦU:
+     - [ ] Backup/snapshot đã tạo
+     - [ ] Changelog đã đọc kỹ
+     - [ ] Breaking changes đã map hết
+     - [ ] Codemod đã check (nếu có)
+     - [ ] Team đã notified (nếu cần)
+     - [ ] Timeline đã estimate
+     - [ ] Rollback plan đã ready
+
+═══════════════════════════════════════════════════════════════════════
+🎯 QUICK DECISION:
+
+  Type "yes"  → Tiến hành upgrade theo phase
+  Type "plan" → Xem chi tiết từng step
+  Type "skip" → Bỏ qua, chuyển package tiếp theo
+  Type "defer"→ Đánh dấu defer, làm sau
+═══════════════════════════════════════════════════════════════════════
+```
+
+---
+
+**CÁCH TẠO TL;DR COMPARISON:**
+
+```bash
+# 1. Trước upgrade — measure baseline
+echo "=== BASELINE: [package]@[old-version] ==="
+yarn build 2>&1 | grep -E "dist|vite|bundle" | head -10
+ls -la dist/assets/*.js 2>/dev/null | awk '{print $5, $9}'
+cat package.json | grep '"[package]"' 
+
+# 2. Sau upgrade — compare
+echo "=== AFTER: [package]@[new-version] ==="
+yarn build 2>&1 | grep -E "dist|vite|bundle" | head -10
+ls -la dist/assets/*.js 2>/dev/null | awk '{print $5, $9}'
+cat package.json | grep '"[package]"' 
+
+# 3. So sánh nhanh
+echo "=== COMPARISON ==="
+echo "Bundle Change: [old-size] → [new-size] ([+/-X%])"
+echo "Build Time: [old-time]s → [new-time]s"
+```
+
+**VÍ DỤ OUTPUT TL;DR:**
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  TL;DR: react 18.2.0 → 19.2.5                                      ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  Bundle:    142 KB → 138 KB  (-2.8%) ✅                          ║
+║  Build:     12.3s → 11.8s    (-4%)   ✅                          ║
+║  Security:  0 CVEs → 3 CVEs fixed ✅                             ║
+║  Features:  +12 new hooks, +3 new APIs ✅                         ║
+║  Breaking:  4 APIs removed, 8 changed ⚠️                          ║
+║  Effort:    ~2 hours ⚠️                                           ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  VERDICT: ✅ UPGRADE — Benefits outweigh risks                   ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+═══════════════════════════════════════════════════════════════════════
 COMMIT STRATEGY
 ═══════════════════════════════════════════════════════════════════════
 
