@@ -281,6 +281,71 @@ Fetch and follow instructions from https://raw.githubusercontent.com/NguyenThong
 
 ---
 
+## Plugin Management
+
+### Update Plugin (Khi có phiên bản mới)
+
+**Cách 1: Tự động update (Recommended)**
+
+```bash
+# Trong Claude Code session, chạy:
+/plugin update quocduyapp
+```
+
+**Cách 2: Manual update qua marketplace**
+
+```bash
+# Xóa plugin cũ
+/plugin uninstall quocduyapp
+
+# Cài lại từ marketplace
+/plugin marketplace add https://github.com/NguyenThong251/quocduyapp-plugin
+/plugin install quocduyapp@quocduyapp
+```
+
+**Cách 3: Pull code mới nhất từ Git**
+
+```bash
+# Clone repo
+git clone https://github.com/NguyenThong251/quocduyapp-plugin.git
+
+# Copy thủ công vào plugins directory của Claude Code
+# Windows: C:\Users\<user>\.claude\plugins\
+# macOS: ~/.claude/plugins/
+# Linux: ~/.claude/plugins/
+```
+
+### Uninstall Plugin
+
+```bash
+# Gỡ plugin
+/plugin uninstall quocduyapp
+
+# Hoặc xóa thủ công
+# Windows: Xóa thư mục C:\Users\<user>\.claude\plugins\quocduyapp\
+# macOS/Linux: rm -rf ~/.claude/plugins/quocduyapp/
+```
+
+### Kiểm tra Plugin đã cài đặt
+
+```bash
+# Xem danh sách plugins đã cài
+/plugin list
+
+# Hoặc xem phiên bản hiện tại
+/plugin info quocduyapp
+```
+
+### Xem Plugin Source
+
+```bash
+# Plugin được cache tại:
+# Windows: C:\Users\<user>\.claude\plugins\cache\NguyenThong251\quocduyapp-plugin\
+# macOS/Linux: ~/.claude/plugins/cache/NguyenThong251/quocduyapp-plugin/
+```
+
+---
+
 ## License
 
 MIT — Free to use, modify, and distribute.
