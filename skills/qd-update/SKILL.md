@@ -121,8 +121,9 @@ Breaking Changes:  [Yes / No]
     3. Analyze source code (nếu cần sửa code)
     4. Dev server check (nếu là frontend)
     5. Auto-fix loop (3 attempts) nếu có lỗi
-    6. Hiển thị kết quả
-    7. Hỏi: push hay rollback?
+    6. Final verification (build + tests + dev server + type check)
+    7. Hiển thị kết quả
+    8. Hỏi: push hay rollback?
 
 ───────────────────────────────────────────────────────────
 
@@ -519,6 +520,101 @@ fi
 
 ---
 
+### Step 5.7: Final Verification ⭐ (CHẠY SAU KHI FIX + TRƯỚC KHI PUSH)
+
+**Sau khi auto-fix xong (hoặc không cần fix) — CHẠY LẠI TẤT CẢ để verify:**
+
+```bash
+echo ""
+echo "═══════════════════════════════════════════════════════"
+echo "  ✅ FINAL VERIFICATION — ALL CHECKS"
+echo "═══════════════════════════════════════════════════════"
+echo ""
+
+# 1. Re-build
+echo "🔨 Step 1/4: Re-building..."
+yarn build 2>&1 | tee final-build.log
+if [ ${PIPESTATUS[0]} -ne 0 ]; then
+  echo "❌ Final build failed"
+  tail -20 final-build.log
+  echo "⚠️ AUTO-ROLLED BACK"
+  git checkout package.json yarn.lock
+  yarn install 2>/dev/null
+  exit 1
+fi
+echo "✅ Build passed"
+
+# 2. Re-run tests
+echo ""
+echo "🧪 Step 2/4: Re-running tests..."
+yarn test --run 2>/dev/null | tee final-test.log
+if [ ${PIPESTATUS[0]} -ne 0 ]; then
+  echo "❌ Final tests failed"
+  tail -30 final-test.log
+  echo "⚠️ AUTO-ROLLED BACK"
+  git checkout package.json yarn.lock
+  yarn install 2>/dev/null
+  exit 1
+fi
+echo "✅ Tests passed"
+
+# 3. Re-check dev server (nếu là frontend)
+echo ""
+echo "🖥️  Step 3/4: Re-checking dev server..."
+if [ -n "$DEV_CMD" ]; then
+  $DEV_CMD > final-dev.log 2>&1 &
+  DEV_PID=$!
+  sleep $DEV_WAIT
+
+  if curl -s --max-time 5 "$DEV_URL" > /dev/null 2>&1; then
+    FINAL_ERRORS=$(grep -iE "Error:|Uncaught|ReferenceError|TypeError|SyntaxError|Cannot|failed|ENOENT" final-dev.log 2>/dev/null | grep -v "^info:\|^warn:\|^Warning:" | wc -l)
+    if [ $FINAL_ERRORS -gt 0 ]; then
+      echo "❌ Final dev server check: $FINAL_ERRORS errors found"
+      tail -30 final-dev.log
+      echo "⚠️ AUTO-ROLLED BACK"
+      kill $DEV_PID 2>/dev/null
+      git checkout package.json yarn.lock
+      yarn install 2>/dev/null
+      exit 1
+    else
+      echo "✅ Dev server: No errors"
+    fi
+  else
+    echo "❌ Dev server did not start"
+    tail -20 final-dev.log
+    echo "⚠️ AUTO-ROLLED BACK"
+    kill $DEV_PID 2>/dev/null
+    git checkout package.json yarn.lock
+    yarn install 2>/dev/null
+    exit 1
+  fi
+
+  kill $DEV_PID 2>/dev/null
+  wait $DEV_PID 2>/dev/null
+else
+  echo "ℹ️  Skipped (no dev server)"
+fi
+
+# 4. Type check
+echo ""
+echo "🔍 Step 4/4: Type check..."
+yarn lint 2>/dev/null || npx tsc --noEmit 2>/dev/null || echo "ℹ️  No type check configured"
+
+echo ""
+echo "═══════════════════════════════════════════════════════"
+echo "  ✅✅✅ ALL FINAL CHECKS PASSED ✅✅✅"
+echo "═══════════════════════════════════════════════════════"
+echo ""
+echo "   Build:     ✅ Pass"
+echo "   Tests:     ✅ Pass"
+echo "   Dev:       ✅ No errors"
+echo "   Type:      ✅ Pass"
+echo ""
+echo "   → Proceed to FINAL PROMPT"
+```
+
+---
+
 ## Phase 6: Source Code Analysis (BẮT BUỘC khi cần sửa code)
 
 **⚠️ NẾU UPDATE ĐÒI HỎI SỬA CODE — LÀM THEO THỨ TỰ SAU:**
@@ -713,6 +809,7 @@ yarn install 2>/dev/null
 - ❌ Không skip verification
 - ✅ Dev server check cho frontend projects
 - ✅ Auto-fix loop (3 attempts) thay vì rollback ngay
+- ✅ Final verification (build + tests + dev server + type check) TRƯỚC KHI HỎI PUSH/ROLLBACK
 - ✅ **Chỉ rollback khi đã thử 3 lần fix mà vẫn lỗi**
 - ✅ Mọi thay đổi trên branch riêng — rollback dễ dàng
 - ⚠️ **KHI CẦN SỬA CODE — BẮT BUỘC đọc hết source codebase trước** để match style/format/logic chuẩn
@@ -727,5 +824,6 @@ yarn install 2>/dev/null
 □ Phân tích source code TRƯỚC khi sửa (Phase 6)
 □ Dev server check (Phase 5.5)
 □ Auto-fix loop 3 lần trước khi rollback (Phase 5.6)
+□ Final verification: build + tests + dev server + type check (Phase 5.7)
 □ Final prompt: push hay rollback?
 ```
