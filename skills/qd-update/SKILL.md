@@ -1,6 +1,6 @@
 ---
 name: qd-update
-description: Execute safe, one-by-one dependency updates with user confirmation per library, baseline creation, step-by-step verification, and rollback strategy.
+description: Execute safe, one-by-one dependency updates with automated verification and one-click push/rollback decision.
 triggers:
   - /qd-update
   - update react
@@ -13,70 +13,45 @@ triggers:
 
 # /qd-update
 
-You are a **middle-senior software developer** specializing in dependency management and library upgrade workflows. You strictly follow an 8-phase process to update **ONE library at a time** with full verification, user confirmation, and rollback strategy.
-
-## CRITICAL: User Confirmation Required
-
-**BEFORE doing anything, you must:**
-
-1. Read `CHANGELOG_DEPENDENCY_UPDATE.md` from `/qd-outdated`
-2. Ask user to CONFIRM which package to update
-3. Wait for user confirmation
-4. Only then proceed with the update
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  CONFIRMATION REQUIRED                                  │
-│                                                          │
-│  You selected: [package-name]                           │
-│  Current: [v1.x.x] → Latest: [v2.x.x]                  │
-│  Risk: [Critical / Major / Minor / Patch]               │
-│                                                          │
-│  Type "yes" to confirm, or specify a different version  │
-│  Type "skip" to cancel                                  │
-└──────────────────────────────────────────────────────────┘
-```
+Bạn là **middle-senior software developer** chuyên quản lý dependency và upgrade library. Một library tại một thời điểm, tự động làm hết tất cả verification, chỉ hỏi **1 lần duy nhất** ở cuối: push hay rollback.
 
 ---
 
-## Confirmation Workflow
+## Confirmation Workflow (CHỈ 1 LẦN)
 
 ```
 User runs: /qd-update react
 
 Step 1: Read CHANGELOG_DEPENDENCY_UPDATE.md
          ↓
-Step 2: Confirm with user:
-         "You want to update react from 19.2.4 to 19.2.5 (Patch - Safe)"
-         "Type 'yes' to confirm:"
+Step 2: Show summary + ONE confirmation prompt
          ↓
 User types: "yes"
          ↓
-Step 3: Execute update workflow (Phase 1-8)
+Step 3: Automated workflow (Phase 1-8) — NO interruption
          ↓
-Step 4: Report results
+Step 4: Report ALL results
          ↓
-Step 5: Ask: "Update another package? Run /qd-update <name>"
+Step 5: ONE final decision prompt
+  "✅ All checks passed. Push now or rollback?"
+  "push"   → commit + push
+  "rollback" → revert + restore
+```
+
+**Nếu verification fail ở bất kỳ bước nào → TỰ ĐỘNG ROLLBACK → hỏi:**
+
+```
+⚠️ VERIFICATION FAILED — AUTO-ROLLED BACK
+
+Error: [build/test/dev server failed]
+Fix: [hints]
+
+Retry? /qd-update <package>
 ```
 
 ---
 
-## 8-Phase Workflow
-
-```
-Phase 1: Audit          ← Read CHANGELOG, confirm package + version
-Phase 2: Classify       ← Confirm risk level with user
-Phase 3: Prepare Baseline ← Snapshot, test, dedicated branch
-Phase 4: Update ONE     ← Execute update command
-Phase 5: Verify         ← Build, test, bundle size check
-Phase 6: Major Strategy  ← Codemod / incremental if breaking
-Phase 7: Preventive Tool ← Config tooling
-Phase 8: Deploy         ← Commit + PR
-```
-
----
-
-## Phase 1: Audit
+## Phase 1: Audit & Confirm (1 prompt duy nhất)
 
 **Step 1.1: Read CHANGELOG_DEPENDENCY_UPDATE.md**
 
@@ -84,94 +59,73 @@ Phase 8: Deploy         ← Commit + PR
 cat CHANGELOG_DEPENDENCY_UPDATE.md 2>/dev/null || echo "CHANGELOG_DEPENDENCY_UPDATE.md not found. Run /qd-outdated first."
 ```
 
-**Step 1.2: Extract package info**
-
-From the changelog, find:
-- Package name
-- Current version
-- Target version
-- Risk level
-- Breaking changes (if any)
-- Migration steps
-
-**Step 1.3: Check current usage in codebase**
+**Step 1.2: Detect package manager**
 
 ```bash
-# Find all imports/requires
-grep -rn "from ['\"]react['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l
-
-# For named imports (lodash, etc.)
-grep -rn "lodash/map\|lodash/cloneDeep\|lodash/debounce" --include="*.js" --include="*.jsx" 2>/dev/null | head -10
-
-# Config files
-cat vite.config.js 2>/dev/null || cat vite.config.mjs 2>/dev/null || cat vite.config.ts 2>/dev/null
-cat babel.config.js 2>/dev/null
-cat next.config.js 2>/dev/null || cat next.config.mjs 2>/dev/null
-```
-
-**Step 1.4: Detect package manager**
-
-```bash
-if [ -f "yarn.lock" ]; then
-  PM=yarn
-  UPDATE_CMD="yarn upgrade"
-elif [ -f "pnpm-lock.yaml" ]; then
-  PM=pnpm
-  UPDATE_CMD="pnpm update"
-elif [ -f "package-lock.json" ]; then
-  PM=npm
-  UPDATE_CMD="npm update"
-elif [ -f "composer.lock" ]; then
-  PM=composer
-  UPDATE_CMD="composer require"
-elif [ -f "poetry.lock" ]; then
-  PM=poetry
-  UPDATE_CMD="poetry add"
-elif [ -f "go.sum" ]; then
-  PM=go
-  UPDATE_CMD="go get"
-elif [ -f "Cargo.lock" ]; then
-  PM=cargo
-  UPDATE_CMD="cargo update"
+if [ -f "yarn.lock" ]; then PM=yarn
+elif [ -f "pnpm-lock.yaml" ]; then PM=pnpm
+elif [ -f "package-lock.json" ]; then PM=npm
+elif [ -f "composer.lock" ]; then PM=composer
+elif [ -f "poetry.lock" ]; then PM=poetry
+elif [ -f "go.sum" ]; then PM=go
+elif [ -f "Cargo.lock" ]; then PM=cargo
 fi
 ```
 
-**Step 1.5: Confirm with user**
+**Step 1.3: Check current usage**
+
+```bash
+grep -rn "from ['\"]react['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l
+```
+
+**Step 1.4: Detect project type (for dev server check)**
+
+```bash
+if [ -f "vite.config.js" ] || [ -f "vite.config.ts" ] || [ -f "vite.config.mjs" ]; then
+  DEV_CMD="yarn dev"
+  DEV_URL="http://localhost:5173"
+  DEV_WAIT=8
+elif [ -f "next.config.js" ] || [ -f "next.config.mjs" ]; then
+  DEV_CMD="yarn dev"
+  DEV_URL="http://localhost:3000"
+  DEV_WAIT=15
+elif [ -f "package.json" ] && grep -q '"start"' package.json; then
+  DEV_CMD="yarn start"
+  DEV_URL="http://localhost:3000"
+  DEV_WAIT=10
+fi
+```
+
+**Step 1.5: Extract info và hiển thị confirmation**
 
 ```
-═══════════════════════════════════════════════════════
-  UPDATE REQUESTED: [package-name]
-═══════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════
+  📦 UPDATE REQUESTED: [package-name]
+═══════════════════════════════════════════════════════════
 
 Current Version:  [v1.x.x]
 Target Version:   [v2.x.x]
 Risk Level:       [Critical / Major / Minor / Patch]
 Package Manager:  [yarn / npm / etc.]
-Usage in code:    [N files]
+Dev Server:       [yarn dev / yarn start / none]
 
 Breaking Changes:  [Yes / No]
   - [Breaking change 1]
   - [Breaking change 2]
 
-Migration Steps:
-  1. [Step 1]
-  2. [Step 2]
+───────────────────────────────────────────────────────────
 
-───────────────────────────────────────────────────────
+⚠️  Automated workflow sẽ:
+    1. Tạo branch riêng
+    2. Chạy build + tests
+    3. [Dev server check nếu là frontend]
+    4. Hiển thị kết quả
+    5. Hỏi: push hay rollback?
 
-⚠️  RISK ASSESSMENT:
-    [For Critical: "Security vulnerability - update immediately"]
-    [For Major: "Breaking changes - requires migration"]
-    [For Minor: "New features - test regression required"]
-    [For Patch: "Bug fix - safe to update"]
+───────────────────────────────────────────────────────────
 
-═══════════════════════════════════════════════════════
-
-Please confirm:
-  Type "yes" → Proceed with update
-  Type "yes --force" → Proceed even with warnings
-  Type "skip" → Cancel
-  Type "rollback" → Rollback previous update
+Type "yes"  → Bắt đầu update tự động
+Type "skip" → Hủy
 ```
 
 ---
@@ -180,137 +134,62 @@ Please confirm:
 
 | Risk | Trigger | Action |
 |------|---------|--------|
-| 🔴 **Critical (CVE)** | Security vuln | Update immediately — no debate |
-| 🔴 **Major (2+ behind)** | 2+ major versions behind | Incremental migration — STOP and explain |
-| 🟡 **Major (1 behind)** | 1 major jump | Codemod-assisted, incremental |
-| 🟡 **Minor** | Minor version | Test regression required |
+| 🔴 **Critical (CVE)** | Security vuln | Update immediately |
+| 🔴 **Major (2+ behind)** | 2+ major versions | **Dừng** — báo incremental migration |
+| 🟡 **Major (1 behind)** | 1 major jump | Codemod-assisted |
+| 🟡 **Minor** | Minor version | Test regression |
 | 🟢 **Patch** | Patch version | Safe to update |
 
-**If Major 2+ behind:**
+**Nếu Major 2+ behind → Dừng, hỏi user muốn incremental hay skip:**
 
 ```
-⚠️  MAJOR VERSION 2+ BEHIND DETECTED
+⚠️ MAJOR VERSION 2+ BEHIND DETECTED
 
-[package] is [N] major versions behind:
-  Current: [1.x.x]
-  Latest:   [3.x.x]
+[package] is [N] major versions behind.
+Khuyến nghị: INCREMENTAL MIGRATION
 
-Recommendation: INCREMENTAL MIGRATION
-
-Step 1: Update to latest of current major
-        yarn upgrade react@^18.x
-        → Verify everything works
-        → Commit
-
-Step 2: Update to next major
-        yarn upgrade react@^19.x
-        → Fix breaking changes
-        → Verify everything works
-        → Commit
-
-Do NOT proceed with direct update from [1.x.x] to [3.x.x].
-This is a big bang rewrite and will cause issues.
-
-Type "incremental" to proceed with Step 1
-Type "skip" to cancel
+Type "incremental" → Bắt đầu migration từng bước
+Type "skip" → Hủy
 ```
 
 ---
 
 ## Phase 3: Prepare Baseline
 
-**Step 3.1: Create dedicated branch**
-
 ```bash
+# 1. Tạo branch
 git checkout -b update/<package>-<from>-to-<to>
-# Example: git checkout -b update/react-19.2.4-to-19.2.5
-```
 
-**Step 3.2: Snapshot current state**
-
-```bash
-# Record current versions
+# 2. Baseline file
 cat > BASELINE-<package>.md << 'EOF'
 # Baseline: <package> <from> → <to>
-
-## Date
-[DATE]
-
-## Before Update
-- Package: <package>@<current-version>
-- Commit: $(git rev-parse HEAD)
-- Branch: $(git branch --show-current)
-
-## Build Info
-[To be filled after build]
-
-## Tests
-[To be filled after test run]
+## Date: $(date '+%Y-%m-%d %H:%M')
+## Before: <package>@<from>
+## Commit: $(git rev-parse HEAD)
 EOF
 
-# Take screenshot of important pages (if frontend)
-# Start dev server
-yarn dev &
-DEV_PID=$!
-sleep 5
+# 3. Measure bundle TRƯỚC
+if grep -q '"build"' package.json; then
+  echo "📦 Measuring baseline bundle..."
+  yarn build 2>&1 | tee build-before.log
+fi
 
-# Check if dev server is healthy
-curl -s http://localhost:5173/ | head -5 || echo "Dev server check"
+# 4. Run tests TRƯỚC
+echo "🧪 Running baseline tests..."
+yarn test --run 2>/dev/null | tee test-before.log || echo "No test suite"
 
-kill $DEV_PID 2>/dev/null
-```
-
-**Step 3.3: Measure current bundle**
-
-```bash
-# Build and measure
-yarn build 2>&1 | tee build-before.log
-
-# Extract bundle sizes
-grep -E "dist/|build:|\.js|\.css" build-before.log | head -20
-
-# For Vite
-ls -la dist/assets/*.js 2>/dev/null | awk '{print $5, $9}'
-```
-
-**Step 3.4: Run existing tests**
-
-```bash
-# Node.js
-yarn test --run 2>/dev/null || echo "No test suite"
-
-# Python
-python -m pytest 2>/dev/null || python -m unittest 2>/dev/null || echo "No pytest"
-
-# Rust
-cargo test 2>/dev/null || echo "No cargo test"
-
-# Go
-go test ./... 2>/dev/null || echo "No go test"
-```
-
-**Step 3.5: Record baseline**
-
-```
-Baseline created:
-  - Branch: update/<package>-<from>-to-<to>
-  - Commit: [hash]
-  - Bundle size: [size]
-  - Tests: [passing/failing]
+echo "✅ Baseline recorded"
 ```
 
 ---
 
 ## Phase 4: Update ONE Library
 
-**⚠️ ONE LIBRARY ONLY — NEVER UPDATE MULTIPLE AT ONCE**
+**⚠️ CHỈ 1 LIBRARY — KHÔNG BAO GIỜ NHIỀU HƠN**
 
 ```bash
-# Detect PM and run appropriate command
-
-# Yarn (recommended)
+# Yarn
 yarn upgrade <package>@<target-version>
-# Example: yarn upgrade react@^19.2.5
 
 # npm
 npm update <package>@<target-version>
@@ -340,662 +219,167 @@ cargo update <package> --version <target-version>
 dotnet add package <package> --version <target-version>
 ```
 
-**Verify lockfile changed:**
-
-```bash
-git diff yarn.lock | head -50
-# If > 100 lines → investigate unexpected transitive deps
-```
-
 ---
 
-## Phase 5: Verify
-
-### Step 5.0: Clean Old Artifacts (MANDATORY)
-
-**TRƯỚC KHI BUILD, phải clean toàn bộ artifact cũ để đảm bảo build thực sự dùng code mới:**
-
-```bash
-# Xác định loại project và clean đúng artifact
-echo "=== CLEANING OLD ARTIFACTS ==="
-
-# Common build caches
-rm -rf node_modules/.cache 2>/dev/null
-rm -rf .next 2>/dev/null
-rm -rf dist 2>/dev/null
-rm -rf .nuxt 2>/dev/null
-rm -rf .output 2>/dev/null
-rm -rf .astro 2>/dev/null
-rm -rf .svelte-kit 2>/dev/null
-
-# Tìm và xóa các .module file (CSS modules cache)
-find . -name "*.module.css" -o -name "*.module.scss" -o -name "*.module.sass" 2>/dev/null | head -5
-find . -path "*/node_modules/.vite" -type d 2>/dev/null | xargs rm -rf 2>/dev/null
-find . -path "*/node_modules/.cache" -type d 2>/dev/null | xargs rm -rf 2>/dev/null
-
-# TypeScript build cache
-rm -rf tsconfig.tsbuildinfo 2>/dev/null
-rm -rf *.tsbuildinfo 2>/dev/null
-
-# ESLint / TSC cache
-rm -rf .eslintcache 2>/dev/null
-rm -rf .tscache 2>/dev/null
-
-# Fallback: chỉ xóa dist nếu là Node.js backend không có frontend cache
-if [ ! -d "src" ] && [ ! -d "app" ]; then
-  echo "Backend-only project: skipping frontend caches"
-fi
-
-# Kiểm tra đã clean chưa
-echo "=== VERIFY CLEAN ==="
-ls -la dist .next .nuxt .output 2>/dev/null || echo "All clean."
-
-# IMPORTANT: Nếu project dùng PNPM hoặc workspace, clean hoàn toàn
-if [ -f "pnpm-lock.yaml" ]; then
-  echo "PNPM detected: clean store..."
-  # KHÔNG chạy pnpm store prune vì nó ảnh hưởng global
-  # Chỉ xóa local workspace cache
-fi
-
-echo "=== CLEAN COMPLETE — READY TO BUILD ==="
-```
-
-**TẠI SAO PHẢI CLEAN?**
-- File `.module` cũ có thể chứa CSS mapping từ version cũ → gây lỗi stylesheet không đúng
-- Cache `dist/`, `.next/` chứa compiled code từ version cũ → build lại vẫn dùng cache cũ
-- TypeScript `tsbuildinfo` lưu incremental build state → type errors không được phát hiện
-- Không clean = có thể che giấu lỗi thực sự từ version mới
+## Phase 5: Verify (TỰ ĐỘNG — KHÔNG HỎI)
 
 ### Step 5.1: Build
 
 ```bash
+echo "🔨 Running build..."
 yarn build 2>&1 | tee build-after.log
+BUILD_RESULT=$?
 
-# Compare bundle sizes
-echo "=== BUNDLE SIZE COMPARISON ==="
-echo "BEFORE:"
-grep -E "\.js|\.css" build-before.log | head -10
-echo "AFTER:"
-grep -E "\.js|\.css" build-after.log | head -10
-
-# If size increase > 10% → investigate
+if [ $BUILD_RESULT -ne 0 ]; then
+  echo "❌ BUILD FAILED"
+  # AUTO ROLLBACK
+  git checkout package.json yarn.lock
+  yarn install 2>/dev/null
+  echo "⚠️ AUTO-ROLLED BACK to original state"
+  exit 1
+fi
+echo "✅ Build passed"
 ```
 
-### Step 5.2: Type Check
+### Step 5.2: Bundle Size Check
 
 ```bash
-# ESLint
-yarn lint 2>/dev/null || echo "No lint configured"
-
-# TypeScript
-npx tsc --noEmit 2>/dev/null || echo "No TypeScript"
-
-# Python
-mypy <package> 2>/dev/null || echo "No mypy"
-
-# Rust
-cargo check 2>/dev/null || echo "No cargo check"
+if [ -f "build-before.log" ] && [ -f "build-after.log" ]; then
+  echo "📊 Bundle size comparison..."
+  echo "BEFORE:"
+  ls -la dist/assets/*.js 2>/dev/null | awk '{print $5, $9}'
+  echo "AFTER:"
+  ls -la dist/assets/*.js 2>/dev/null | awk '{print $5, $9}'
+fi
 ```
 
-### Step 5.3: Run Tests
+### Step 5.3: Type Check
 
 ```bash
-yarn test --run 2>/dev/null
-# Check for new failures
-
-# If tests fail:
-# → DO NOT COMMIT
-# → Run: git revert HEAD && git checkout yarn.lock && yarn install
-# → Report: "Tests failed. Rolled back."
+echo "🔍 Running type check..."
+yarn lint 2>/dev/null || npx tsc --noEmit 2>/dev/null || echo "⚠️  No type check configured"
 ```
 
-### Step 5.4: UI Smoke Test (Frontend)
+### Step 5.4: Run Tests
 
 ```bash
-# Start dev server
-yarn dev &
-sleep 5
+echo "🧪 Running tests..."
+yarn test --run 2>/dev/null | tee test-after.log
+TEST_RESULT=$?
 
-# Manual check or use Playwright
-# Check:
-#   - Homepage loads
-#   - Navigation works
-#   - Core feature works
-#   - No console errors
-
-kill %1 2>/dev/null
+if [ $TEST_RESULT -ne 0 ] && [ -s test-after.log ]; then
+  echo "❌ TESTS FAILED"
+  # AUTO ROLLBACK
+  git checkout package.json yarn.lock
+  yarn install 2>/dev/null
+  echo "⚠️ AUTO-ROLLED BACK — tests failed"
+  exit 1
+fi
+echo "✅ Tests passed"
 ```
 
-**If ANY verification fails:**
+### Step 5.5: Dev Server Runtime Check ⭐ (MỚI)
+
+**Chỉ chạy nếu project là frontend (vite, next, react-scripts)**
 
 ```bash
-# IMMEDIATE ROLLBACK
-git checkout yarn.lock package.json
-yarn install
+# Chỉ chạy nếu có dev server
+if [ -n "$DEV_CMD" ]; then
+  echo "🖥️  Starting dev server for runtime check..."
+  echo "   Command: $DEV_CMD"
+  echo "   URL: $DEV_URL"
+  echo "   Waiting ${DEV_WAIT}s for server to start..."
 
-echo "⚠️  VERIFICATION FAILED — ROLLED BACK"
-echo "Fix issues before retrying."
+  # Bắt đầu dev server
+  $DEV_CMD > dev-server.log 2>&1 &
+  DEV_PID=$!
+
+  # Đợi server khởi động
+  sleep $DEV_WAIT
+
+  # Kiểm tra server có chạy không
+  if curl -s --max-time 5 "$DEV_URL" > /dev/null 2>&1; then
+    echo "✅ Dev server is running at $DEV_URL"
+
+    # Lấy HTML và kiểm tra console error trong log
+    echo "📋 Checking dev server logs for errors..."
+
+    ERROR_COUNT=0
+
+    # Common runtime error patterns
+    if grep -iE "Error:|Uncaught|ReferenceError|TypeError|SyntaxError|Cannot|failed|ENOENT|Module not found" dev-server.log 2>/dev/null | grep -v "^info:\|^warn:\|^Warning:" > /dev/null; then
+      ERROR_COUNT=$(grep -iE "Error:|Uncaught|ReferenceError|TypeError|SyntaxError|Cannot|failed|ENOENT|Module not found" dev-server.log 2>/dev/null | grep -v "^info:\|^warn:\|^Warning:" | wc -l)
+    fi
+
+    # Kiểm tra HMR/cold start errors
+    if grep -iE "HMR|hot reload|cold start" dev-server.log 2>/dev/null | grep -iE "error|failed" > /dev/null; then
+      ERROR_COUNT=$((ERROR_COUNT + 1))
+    fi
+
+    if [ $ERROR_COUNT -gt 0 ]; then
+      echo "❌ DEV SERVER ERRORS DETECTED ($ERROR_COUNT issues)"
+      echo ""
+      echo "=== Dev Server Log (last 30 lines) ==="
+      tail -30 dev-server.log
+      echo ""
+      echo "⚠️  RUNTIME ERRORS FOUND — AUTO-ROLLING BACK"
+      kill $DEV_PID 2>/dev/null
+      git checkout package.json yarn.lock
+      yarn install 2>/dev/null
+      echo "⚠️ AUTO-ROLLED BACK"
+      exit 1
+    else
+      echo "✅ No runtime errors detected"
+      echo "   Dev server healthy at $DEV_URL"
+    fi
+  else
+    echo "❌ Dev server failed to start at $DEV_URL"
+    echo ""
+    echo "=== Dev Server Log (last 30 lines) ==="
+    tail -30 dev-server.log
+    kill $DEV_PID 2>/dev/null
+    git checkout package.json yarn.lock
+    yarn install 2>/dev/null
+    echo "⚠️ AUTO-ROLLED BACK — dev server failed to start"
+    exit 1
+  fi
+
+  # Dọn dev server
+  kill $DEV_PID 2>/dev/null
+  wait $DEV_PID 2>/dev/null
+  echo "🧹 Dev server stopped"
+else
+  echo "ℹ️  No dev server detected — skipping runtime check"
+fi
 ```
 
 ---
 
-## Phase 6: Major Version Strategy (Multi-Step with Auto-Assessment)
+## Phase 6: Major Version Strategy (nếu cần)
 
-**When needed:** Major version jump (1.x → 2.x) or 2+ versions behind
-
----
-
-### Workflow for Major Updates
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  MAJOR UPDATE: [package] [1.x] → [2.x]                    │
-│                                                              │
-│  Step 1: Create baseline (snapshot, tests, branch)          │
-│       ↓                                                      │
-│  Step 2: Update to intermediate version (if 2+ major)        │
-│       ↓                                                      │
-│  AUTO-ASSESS: Compare old vs new code                       │
-│  • What changed?                                              │
-│  • UI/Performance impact?                                    │
-│  • Breaking changes?                                          │
-│       ↓                                                      │
-│  Step 3: Show assessment to user                             │
-│       ↓                                                      │
-│  USER CONFIRM: "Accept these changes?"                      │
-│       ↓                              ↓                       │
-│     YES → Continue               NO → ROLLBACK               │
-│       ↓                              ↓                       │
-│  Step 4: Fix breaking changes    Restore old code           │
-│       ↓                              ↓                       │
-│  Step 5: Verify + Commit         Restore old version       │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Step 1: Baseline Snapshot
-
-**Tạo baseline chi tiết:**
+**Chỉ khi có breaking changes:**
 
 ```bash
-# 1. Git snapshot trước khi thay đổi
-git add -A
-git commit -m "BASELINE: before <package> major update"
-BASELINE_COMMIT=$(git rev-parse HEAD)
-
-# 2. Lưu trạng thái hiện tại
-cat package.json | grep '"<package>"' > baseline-<package>.txt
-yarn outdated | grep "<package>" >> baseline-<package>.txt
-
-# 3. Build baseline
-yarn build 2>&1 | tee build-baseline.log
-BUNDLE_BEFORE=$(cat build-baseline.log | grep -oE '[0-9]+\.[0-9]+ KB' | head -1)
-
-# 4. Screenshot UI baseline (frontend)
-# Chạy dev server và chụp các trang chính
-yarn dev &
-sleep 5
-```
-
----
-
-### Step 2: Incremental Update (nếu 2+ major versions behind)
-
-**Nếu package 2+ major versions behind:**
-
-```
-⚠️  INCREMENTAL UPDATE REQUIRED
-
-[package] is [N] major versions behind:
-  Current: [1.x.x]
-  Target:  [3.x.x]
-
-Recommended path:
-  Step 1: [1.x.x] → [2.x.x] (intermediate)
-  Step 2: [2.x.x] → [3.x.x] (final)
-
-Each step will:
-  1. Update package
-  2. Show what changed (old vs new)
-  3. Auto-assess UI/performance impact
-  4. Ask you to confirm
-  5. Rollback if you reject
-```
-
-**Thực thi từng bước:**
-
-```bash
-# Step 1: Update to intermediate version
-yarn upgrade <package>@^2.x
-
-# Commit intermediate
-git add -A
-git commit -m "INTERIM: <package> [1.x] → [2.x]"
-```
-
----
-
-### Step 3: AUTO-ASSESS — Compare Old vs New
-
-**Sau mỗi update, tự động phân tích:**
-
-```bash
-# 1. So sánh package versions
-echo "=== VERSION CHANGE ==="
-cat package.json | grep '"<package>"'
-echo "---"
-cat baseline-<package>.txt
-
-# 2. So sánh bundle size
-echo "=== BUNDLE SIZE ==="
-echo "Before: $BUNDLE_BEFORE"
-yarn build 2>&1 | tee build-after.log
-BUNDLE_AFTER=$(cat build-after.log | grep -oE '[0-9]+\.[0-9]+ KB' | head -1)
-echo "After: $BUNDLE_AFTER"
-BUNDLE_CHANGE=$(echo "scale=2; ($BUNDLE_AFTER - $BUNDLE_BEFORE) / $BUNDLE_BEFORE * 100" | bc)
-echo "Change: $BUNDLE_CHANGE%"
-
-# 3. Xem code changes
-echo "=== CODE CHANGES ==="
-git diff src/ --stat | head -20
-
-# 4. Tìm breaking changes trong imports
-grep -rn "from ['\"]<package>['\"]" src/ --include="*.js" --include="*.jsx" | head -20
-
-# 5. Check deprecated API usage
-git diff src/ | grep -E "DEPRECATED|deprecated|will be removed" || echo "No deprecation warnings"
-```
-
-**Tự động đánh giá impact:**
-
-```markdown
-## AUTO-ASSESSMENT: <package> [v1] → [v2]
-
-### Version Change
-- Old: [v1.x.x]
-- New: [v2.x.x]
-
-### Bundle Size Impact
-- Before: [X KB]
-- After: [Y KB]
-- Change: [+/- Z%]
-- Status: ✅ OK (< 10%) | ⚠️ WARNING (> 10%)
-
-### Code Changes
-- Files changed: [N]
-- Lines added: [N]
-- Lines removed: [N]
-
-### Breaking Changes Detected
-- [Breaking change 1]
-- [Breaking change 2]
-
-### UI/Performance Impact
-- [Impact assessment]
-
-### Risk Level
-- 🔴 HIGH: Breaking changes detected
-- 🟡 MEDIUM: Bundle size increased > 10%
-- 🟢 LOW: Minor changes, no breaking API
-```
-
----
-
-### Step 4: USER CONFIRMATION
-
-**Sau khi assess, hiển thị cho user:**
-
-```
-═══════════════════════════════════════════════════════════════
-  AUTO-ASSESSMENT COMPLETE: <package> [v1] → [v2]
-═══════════════════════════════════════════════════════════════
-
-📦 Bundle Impact:    [X KB] → [Y KB] ([+/-Z%])
-📁 Files Changed:    [N] files
-⚠️  Breaking APIs:   [N] detected
-🔧 Code Fixes Needed: [Y] locations
-
-───────────────────────────────────────────────────────────────
-
-CHANGES SUMMARY:
-[Bullet list of key changes]
-
-───────────────────────────────────────────────────────────────
-
-DO YOU ACCEPT THESE CHANGES?
-
-  ✅ YES — Accept and continue
-     Type: "yes" or "yes --fix" (auto-fix breaking changes)
-
-  ❌ NO — Reject and rollback
-     Type: "no" or "rollback"
-
-  🔍 SHOW DETAILS — See full diff
-     Type: "diff" to see code changes
-
-═══════════════════════════════════════════════════════════════
-```
-
----
-
-### Step 5: ACCEPT → Fix + Continue
-
-**Nếu user accept:**
-
-```bash
-# 1. Apply codemod nếu có
-npx <package>-codemod <transform> src/ 2>/dev/null || echo "No codemod available"
-
-# 2. Fix breaking changes manually
-# Tìm và fix các deprecated APIs
-grep -rn "deprecated\|will be removed" src/ --include="*.js" 2>/dev/null | head -20
-
-# 3. Build lại
-yarn build
-
-# 4. Test
-yarn test --run
-
-# 5. Commit
-git add -A
-git commit -m "feat(deps): upgrade <package> from <v1> to <v2>
-
-Breaking changes fixed:
-- [Fix 1]
-- [Fix 2]
-
-Bundle impact: $BUNDLE_CHANGE%"
-```
-
----
-
-### Step 5: REJECT → ROLLBACK
-
-**Nếu user reject (type "no" hoặc "rollback"):**
-
-```bash
-# 1. Khôi phục code
-git checkout -- src/ package.json yarn.lock
-
-# 2. Checkout baseline commit
-git checkout $BASELINE_COMMIT -- src/ package.json yarn.lock
-
-# 3. Reinstall
-yarn install
-
-# 4. Verify rollback
-yarn outdated | grep "<package>"
-# Phải show version cũ
-
-# 5. Xóa baseline file
-rm baseline-<package>.txt build-baseline.log 2>/dev/null
-
-# 6. Report
-echo "⚠️  ROLLED BACK: <package> reverted to [v1.x.x]"
-echo "Reason: User rejected changes"
-```
-
----
-
-### Step 5b: ABANDON & REBUILD — Too Many Changes / Paradigm Shift
-
-**KHI NÀO CẦN DÙNG:**
-Sau khi assess xong, nếu phát hiện **QUÁ NHIỀU thay đổi** so với bản cũ — ví dụ:
-- Core API thay đổi hoàn toàn (không phải chỉnh sửa nhỏ)
-- Cần rewrite >50% code liên quan
-- Library thay đổi paradigm (vd: Redux → Zustand, class → hooks, callback → async/await)
-- Migration effort lớn hơn giá trị nhận được
-
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║  🚨 PARADIGM SHIFT DETECTED                                          ║
-║                                                                      ║
-║  [package] [v1] → [v2] có QUÁ NHIỀU thay đổi:                    ║
-║                                                                      ║
-║  📊 ASSESSMENT RESULT:                                               ║
-║  ┌────────────────────────────────────────────────────────────────┐ ║
-║  │ Breaking Changes:        [N] locations                          │ ║
-║  │ Files Affected:         [N] files                              │ ║
-║  │ Estimated Effort:       [X] hours / [Y] days                  │ ║
-║  │ Core Rewrites:          [N] components                        │ ║
-║  │ Migration Risk:         🔴 HIGH                               │ ║
-║  └────────────────────────────────────────────────────────────────┘ ║
-║                                                                      ║
-║  💡 RECOMMENDATION:                                                  ║
-║  Việc upgrade có thể yêu cầu refactor lớn.                     ║
-║  Cân nhắc 2 lựa chọn:                                               ║
-║                                                                      ║
-║  ─────────────────────────────────────────────────────────────────  ║
-║  OPTION A: UNDO & ABANDON ❌                                        ║
-║  ─────────────────────────────────────────────────────────────────  ║
-║  • Giữ nguyên version hiện tại                                      ║
-║  • Rollback hoàn toàn                                               ║
-║  • Đánh dấu: [package]@<current> → SKIP (major upgrade not viable) ║
-║  • Tương lai: Cân nhắc build mới hoàn toàn khi có bandwidth       ║
-║                                                                      ║
-║  ─────────────────────────────────────────────────────────────────  ║
-║  OPTION B: OK & PROCEED ✅                                          ║
-║  ─────────────────────────────────────────────────────────────────  ║
-║  • Chấp nhận refactor lớn                                           ║
-║  • Tiếp tục migration từng bước                                    ║
-║  • Đảm bảo test đầy đủ                                              ║
-║  • Commit rõ ràng từng phase                                        ║
-║                                                                      ║
-║  ─────────────────────────────────────────────────────────────────  ║
-║  OPTION C: DEFER (Tương lai) ⏳                                     ║
-║  ─────────────────────────────────────────────────────────────────  ║
-║  • Bookmark lại, không làm bây giờ                                   ║
-║  • Review lại sau [X] tháng                                          ║
-║  • Cập nhật vào DEPENDENCY-REPORT.md                                ║
-║                                                                      ║
-╚══════════════════════════════════════════════════════════════════════╝
-```
-
-**DECISION PROMPT:**
-```
-═══════════════════════════════════════════════════════════════════════
-  YOUR DECISION:
-
-  Type "A" → UNDO & ABANDON (Giữ version cũ, không upgrade)
-  Type "B" → OK & PROCEED (Chấp nhận refactor lớn, tiếp tục)
-  Type "C" → DEFER (Đánh dấu để làm sau)
-  Type "skip" → Cancel and return to package list
-═══════════════════════════════════════════════════════════════════════
-```
-
-**OPTION A: UNDO & ABANDON**
-```bash
-# 1. Rollback to baseline
-git checkout $BASELINE_COMMIT -- src/ package.json yarn.lock
-
-# 2. Reinstall
-yarn install
-
-# 3. Verify version cũ
-yarn outdated | grep "<package>"
-
-# 4. Tạo note trong DEPENDENCY-REPORT.md
-echo "
-## [SKIPPED] [package]@[current] → [target]
-**Date:** $(date)
-**Reason:** Too many breaking changes — paradigm shift
-**Effort Estimate:** [X hours]
-**Recommendation:** Defer to major refactor window
-" >> DEPENDENCY-REPORT.md
-
-# 5. Report
-echo "⚠️  ABANDONED: [package] upgrade postponed"
-echo "Reason: Paradigm shift — requires major rewrite"
-echo "Bookmark added to DEPENDENCY-REPORT.md"
-```
-
-**OPTION B: OK & PROCEED**
-```bash
-# 1. Confirm đã hiểu
-echo "Proceeding with major migration: [package] [v1] → [v2]"
-echo "Breaking changes will be fixed incrementally"
-
-# 2. Tiếp tục với Strategy A/B/C (codemod, incremental, side-by-side)
-
-# 3. Commit with clear message
-git add -A
-git commit -m "chore(deps): proceed with major [package] migration
-
-⚠️  PARADIGM SHIFT — MAJOR REFACTOR REQUIRED
-Breaking changes: [N]
-Files affected: [N]
-Acknowledged by: [user confirmation]
-
-This is a multi-step migration. Breaking changes fixed:
-- [Fix 1]
-- [Fix 2]
-"
-```
-
-**OPTION C: DEFER**
-```bash
-# 1. Rollback
-git checkout $BASELINE_COMMIT -- src/ package.json yarn.lock
-yarn install
-
-# 2. Update DEPENDENCY-REPORT.md với defer note
-cat >> DEPENDENCY-REPORT.md << 'EOF'
-
-### ⏳ DEFERRED: [package] [v1] → [v2]
-- **Deferred Date:** $(date)
-- **Reason:** Paradigm shift — effort > value right now
-- **Effort Estimate:** [X hours]
-- **Review After:** [date + 3 months]
-- **Status:** Pending
-EOF
-
-# 3. Report
-echo "⏳  DEFERRED: [package] upgrade marked for future review"
-echo "Added to DEPENDENCY-REPORT.md"
-```
-
----
-
-### Strategy A: Codemod (PREFERRED for auto-fix)
-
-```bash
-# Search for official codemod
-npx <package>-codemod --help 2>/dev/null
-
-# Common codemods:
-# react-router-dom v6: npx react-router-v6-codemod
-# ant-design v5: npx @ant-design/codemod-v5
-# styled-components v5: npx styled-components-codemod
-# emotion v10: npx @emotion/codemod
-```
-
-```bash
-# Run codemod
-npx <package>-codemod <transform-name> src/
-
-# Example:
-npx react-router-v6-codemod v6-to-v7 src/ --dry
-
-# Review changes
-git diff src/ | head -50
-
-# If looks good, apply:
-npx react-router-v6-codemod v6-to-v7 src/
-```
-
-### Strategy B: Incremental Migration
-
-```
-Step 1: Update to latest of current major
-        yarn upgrade react@^18.x
-        → Verify → Commit
-
-Step 2: Update to next major
-        yarn upgrade react@^19.x
-        → Fix breaking changes
-        → Verify → Commit
-```
-
-### Strategy C: Side-by-Side (LAST RESORT)
-
-```bash
-# Keep both versions temporarily
-yarn add react@18 react@19
-
-# Migrate usage gradually
-# 1. Update one component at a time
-# 2. Test after each
-# 3. Remove old version when done
-yarn remove react@18
-```
-
----
-
-## Phase 7: Preventive Tooling
-
-After successful update, offer to configure:
-
-### Renovate Bot
-
-```bash
-cat > renovate.json << 'EOF'
-{
-  "extends": ["config:base"],
-  "labels": ["dependencies"],
-  "packageRules": [
-    {
-      "matchPackagePatterns": ["<package>"],
-      "groupName": "<package> updates"
-    },
-    {
-      "matchUpdateTypes": ["major"],
-      "labels": ["breaking-change"],
-      "automerge": false
-    },
-    {
-      "matchUpdateTypes": ["patch", "minor"],
-      "labels": ["dependencies"],
-      "automerge": false
-    }
-  ]
+# Thử tìm official codemod
+npx <package>-codemod --help 2>/dev/null && {
+  echo "🔧 Running codemod..."
+  npx <package>-codemod <transform> src/ --dry
+  # Review rồi apply nếu user đồng ý
 }
-EOF
-```
-
-### CI/CD Pipeline
-
-```yaml
-# .github/workflows/dependencies.yml
-name: Dependency Management
-on:
-  schedule:
-    - cron: '0 0 1,4,7,10 1 *'  # Quarterly
-  push:
-    branches: [main]
-
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'yarn'
-      - run: yarn install --frozen-lockfile
-      - run: yarn audit --audit-level=high
-      - name: Check lockfile
-        run: |
-          git diff --exit-code yarn.lock || \
-          (echo "ERROR: yarn.lock changed. Run 'yarn install' and commit." && exit 1)
 ```
 
 ---
 
-## Phase 8: Deploy
+## Phase 7: Preventive Tooling (tùy chọn)
 
-### Commit
+```bash
+# Offer nhưng KHÔNG block
+echo "🔧 Offer preventive tooling? (y/n)"
+```
+
+---
+
+## Phase 8: Commit
 
 ```bash
 git add package.json yarn.lock
@@ -1003,231 +387,92 @@ git commit -m "chore(deps): upgrade <package> from <v1> to <v2>
 
 <Package> <breaking changes / bug fix / security fix>.
 
-Constraint: <reason — e.g. 'CVE-XXXX-XXXX security fix' or 'patch for issue #123'>
+Constraint: <reason>
 Breaking: <yes / no>
 Confidence: high
 Scope-risk: narrow"
-
-git log -1 --oneline
-```
-
-### Push
-
-```bash
-git push -u origin update/<package>-<from>-to-<to>
-
-# Or if on main branch:
-git push
-```
-
-### Cleanup
-
-```bash
-# Remove baseline file
-rm BASELINE-<package>.md
-rm build-before.log build-after.log 2>/dev/null
 ```
 
 ---
 
-## Confirmation Prompt
-
-After each successful update, ask:
+## FINAL PROMPT — CHỈ 1 CÂU HỎI
 
 ```
-═══════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════
   ✅ UPDATE SUCCESSFUL: [package] [v1] → [v2]
-═══════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════
 
-Build:     ✅ Pass
-Tests:     ✅ [N passing]
-Bundle:    [size] (change: +/- X%)
+  Branch:    update/<package>-<from>-to-<to>
+  Build:     ✅ Pass
+  Tests:     ✅ [N passing]
+  Dev:       ✅ No runtime errors
 
-───────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────
 
-NEXT PACKAGE TO UPDATE?
+  Type "push"     → Commit & push to remote
+  Type "rollback" → Revert to original state
 
-Run: /qd-update <package-name>
-
-Example:
-  /qd-update antd
-  /qd-update vite
-  /qd-update lodash
-
-Or type "done" to finish.
+  (Default: push sau 30s nếu không reply)
 ```
+
+**Khi user gõ "push":**
+
+```bash
+git push -u origin update/<package>-<from>-to-<to>
+echo "✅ Pushed to remote"
+echo "📋 Create PR: gh pr create --fill"
+```
+
+**Khi user gõ "rollback":**
+
+```bash
+git revert HEAD
+git checkout yarn.lock package.json
+yarn install 2>/dev/null
+echo "✅ Rolled back — original state restored"
+```
+
+---
+
+## Auto-Rollback Triggers
+
+| Trigger | Action |
+|---------|--------|
+| Build fails | **AUTO ROLLBACK** |
+| Tests fail | **AUTO ROLLBACK** |
+| Dev server dies | **AUTO ROLLBACK** |
+| Runtime errors detected | **AUTO ROLLBACK** |
+| Bundle +20% | **WARN** — ask user |
 
 ---
 
 ## Rollback Strategy
 
-### Immediate Rollback
-
 ```bash
-# 1. Undo commit
+# Manual rollback
 git revert HEAD
-
-# 2. Restore lockfile
-git checkout yarn.lock
-
-# 3. Reinstall
-yarn install
-
-# 4. Verify
-yarn outdated | grep <package>
-# Should show old version
+git checkout yarn.lock package.json
+yarn install 2>/dev/null
 ```
-
-### Version Pinning (Temporary)
-
-```bash
-# Pin to specific version
-yarn add react@19.2.4 --exact
-
-# Or in package.json, set exact version:
-"react": "19.2.4"
-```
-
----
-
-## Error Handling
-
-| Error | Action |
-|-------|--------|
-| `yarn: command not found` | Try npm, then pnpm |
-| `git: not a repository` | STOP — requires git |
-| Build fails after update | **ROLLBACK IMMEDIATELY** |
-| Tests fail after update | **ROLLBACK IMMEDIATELY** |
-| Bundle size +10% | Investigate before committing |
-| Peer dependency conflict | STOP — explain conflict, ask user |
-| Lockfile >100 lines changed | Investigate unexpected transitive deps |
 
 ---
 
 ## Rules
 
-- ❌ **Never** update multiple libraries at once
-- ❌ **Never** skip Phase 1 (confirmation)
-- ❌ **Never** skip Phase 3 (baseline)
-- ❌ **Never** ignore major version jumps
-- ❌ **Never** commit if any verification fails
-- ❌ **Never** big bang update when 2+ major behind
-- ❌ **Never** silently add new dependencies without explicit user confirmation
-- ✅ **Always** confirm with user before updating
-- ✅ **Always** create dedicated branch
-- ✅ **Always** verify (build + test + bundle size)
-- ✅ **Always** rollback if verification fails
-- ✅ **Always** provide rollback strategy
-- ✅ **Always** clean old artifacts (`.next`, `dist`, `*.tsbuildinfo`, `.module`, cache) before rebuild
-
----
-
-## Library Addition Controls
-
-### CRITICAL: No Automatic Library Addition
-
-**KHI ĐANG UPDATE, nếu phát hiện cần thêm library mới (ví dụ: thiếu peer dependency, build thất bại vì thiếu package):**
-
-```
-┌────────────────────────────────────────────────────────────────────┐
-│  🚨 LIBRARY ADDITION REQUIRED                                      │
-│                                                                    │
-│  Package:  [package-name]                                          │
-│  Purpose:  [mô tả ngắn gọn tại sao cần thêm]                     │
-│  Problem:  [lỗi cụ thể đang gặp phải - VD: "peer dep missing"]   │
-│                                                                    │
-│  WHAT THIS LIBRARY SOLVES:                                         │
-│  [Giải thích rõ ràng library này giải quyết vấn đề gì]           │
-│  Example: "Solves 'Cannot find module x' error during build"      │
-│  Example: "Required peer dependency of antd v5 — without it,       │
-│           Button component will throw runtime error"               │
-│                                                                    │
-│  RISK: [Low / Medium / High]                                       │
-│  WHY:  [Tại sao mức risk đó]                                      │
-│                                                                    │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-**BẮT BUỘC phải làm theo 4 bước:**
-
-```
-Step 1: DỪNG LẠI — Không tự ý add library
-Step 2: HIỂN THỊ thông tin library + vấn đề nó giải quyết + risk level
-Step 3: HỎI CONFIRM từ user:
-          "Tôi phát hiện cần thêm [package]. 
-           Library này giải quyết: [mô tả].
-           Bạn có muốn tôi thêm không? Type 'yes' để xác nhận."
-Step 4: CHỈ THÊM SAU KHI user đồng ý
-```
-
-**KHÔNG ĐƯỢC LÀM:**
-- ❌ Tự ý `yarn add [package]` khi chưa có confirm
-- ❌ Thêm library mà không giải thích tại sao
-- ❌ Thêm library mà không đề cập risk
-- ❌ Thêm nhiều library cùng lúc
-- ❌ Thêm library trùng lặp chức năng với library đã có
-
-**SAU KHI THÊM LIBRARY — VẪN PHẢI VERIFY:**
-```bash
-# Sau khi thêm library, clean lại và build
-rm -rf dist .next tsconfig.tsbuildinfo node_modules/.cache 2>/dev/null
-yarn build
-
-# Nếu build fail → ROLLBACK library đó
-git checkout package.json yarn.lock
-echo "⚠️  Build failed after adding [package] — rolled back"
-```
-
-**VÍ DỤ SCENARIOS:**
-
-Scenario 1 — Peer dependency missing:
-```
-[ERROR] Cannot find module 'styled-components'
-[Context] Updating antd from v4 to v5
-[Analysis] antd v5 requires styled-components as peer dependency
-
-LIBRARY: styled-components
-PURPOSE: Required peer dependency — antd v5 uses it for CSS-in-JS
-RISK: Low (widely used, stable)
-
-⚠️  Cần thêm styled-components để antd v5 hoạt động.
-Bạn có muốn tôi thêm không? Type 'yes' để xác nhận.
-```
-
-Scenario 2 — Build error, muốn thêm polyfill:
-```
-[ERROR] Cannot read properties of undefined (reading 'map')
-[Context] Code uses .map() on potential undefined (new in React 19 strict)
-[SOLUTION] Thêm package như @types hoặc refactor code
-
-⚠️  Tôi không tự ý thêm polyfill library.
-Có 2 lựa chọn:
-  1. Thêm library [name] — giải quyết nhanh nhưng thêm dependency
-  2. Refactor code — không thêm dependency
-
-Bạn muốn cách nào? Type '1' hoặc '2'.
-```
+- ❌ Không hỏi nhiều lần — chỉ 1 prompt đầu + 1 prompt cuối
+- ❌ Không update nhiều library cùng lúc
+- ❌ Không skip verification
+- ✅ Tự động rollback nếu bất kỳ check nào fail
+- ✅ Dev server check cho frontend projects
+- ✅ Mọi thay đổi trên branch riêng — rollback dễ dàng
 
 ---
 
 ## Summary Checklist
 
 ```
-Before Update:
-  [ ] Read CHANGELOG_DEPENDENCY_UPDATE.md
-  [ ] Confirmed package + version with user
-  [ ] Created dedicated branch
-  [ ] Recorded baseline (bundle size, tests)
-
-During Update:
-  [ ] Ran update command
-  [ ] Verified lockfile
-
-After Update:
-  [ ] Build passed
-  [ ] Type check passed
-  [ ] Tests passed
-  [ ] Bundle size acceptable (< 10% change)
-  [ ] Committed changes
-  [ ] Cleanup done
+□ Confirm 1 lần duy nhất (Phase 1)
+□ Tự động chạy Phase 2-7 (không hỏi)
+□ Tự động rollback nếu fail
+□ Final prompt: push hay rollback?
 ```

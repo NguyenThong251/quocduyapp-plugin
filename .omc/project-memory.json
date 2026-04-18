@@ -1,0 +1,124 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1776417636971,
+  "projectRoot": "C:\\Users\\admin\\.claude\\projects\\D--QuocDuyApp\\quocduyapp-plugin",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": ">=20.0.0",
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "npm",
+    "runtime": "Node.js 20.0.0"
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "scripts"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "agents": {
+      "path": "agents",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776417636932,
+      "keyFiles": []
+    },
+    "hooks": {
+      "path": "hooks",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776417636936,
+      "keyFiles": []
+    },
+    "rules": {
+      "path": "rules",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1776417636944,
+      "keyFiles": [
+        "qd-conventions.md"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 0,
+      "lastAccessed": 1776417636945,
+      "keyFiles": []
+    },
+    "skills": {
+      "path": "skills",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776417636946,
+      "keyFiles": []
+    },
+    "templates": {
+      "path": "templates",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776417636947,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "skills\\qd-update\\SKILL.md",
+      "accessCount": 9,
+      "lastAccessed": 1776418416429,
+      "type": "file"
+    },
+    {
+      "path": "skills\\qd-outdated\\SKILL.md",
+      "accessCount": 6,
+      "lastAccessed": 1776474528412,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 1,
+      "lastAccessed": 1776417779622,
+      "type": "directory"
+    },
+    {
+      "path": "memory\\user_quocduyapp_plugin_workflow.md",
+      "accessCount": 1,
+      "lastAccessed": 1776473631185,
+      "type": "file"
+    },
+    {
+      "path": "memory\\MEMORY.md",
+      "accessCount": 1,
+      "lastAccessed": 1776473714635,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
