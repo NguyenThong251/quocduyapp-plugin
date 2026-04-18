@@ -195,6 +195,170 @@ npm view <package> releases --json 2>/dev/null | head -20
 npm view <package> homepage 2>/dev/null
 ```
 
+---
+
+### Community & Discussion Sources (MANDATORY for Major Updates)
+
+**KHI major version jump, PHẢI tìm kiếm thêm từ cộng đồng:**
+
+#### 1. Reddit — Real User Experiences
+```
+Query: "[package-name] [new-version] reddit discussion"
+Query: "[package-name] upgrade [old] to [new] worth it reddit"
+Query: "[package-name] [new-version] problems issues reddit"
+```
+- **Tìm:** Thực tế user gặp issues gì khi upgrade
+- **Sites:** reddit.com/r/reactjs, reddit.com/r/node, reddit.com/r/webdev, reddit.com/r/Python, v.v.
+- **WebFetch useful threads:**
+  ```
+  https://reddit.com/r/reactjs/search/?q=<package>+<version>
+  https://reddit.com/r/webdev/search/?q=<package>+upgrade
+  ```
+
+#### 2. Dev.to — Tutorials & War Stories
+```
+Query: "[package-name] [new-version] dev.to migration guide"
+Query: "[package-name] upgrade problems dev.to"
+Query: "[package-name] [new-version] breaking changes tutorial"
+```
+- **Tìm:** Hướng dẫn migrate chi tiết từ dev đã trải qua
+- **Site:** dev.to
+
+#### 3. Stack Overflow — Common Issues
+```
+Query: "[package-name] [new-version] stackoverflow"
+Query: "[package-name] TypeError Error stackoverflow"
+Query: "[package-name] breaking change stackoverflow"
+```
+- **Tìm:** Lỗi phổ biến khi upgrade, cách fix
+- **Site:** stackoverflow.com
+
+#### 4. News & Trends
+```
+Query: "[package-name] [new-version] news announcement"
+Query: "[package-name] [year] trends best practices"
+```
+- **Sites:**
+  - hacker-news (news.ycombinator.com)
+  - daily.dev (daily.dev)
+  - lobste.rs
+- **Tìm:** Xu hướng, so sánh với alternatives
+
+#### 5. GitHub Issues & Discussions
+```
+Query: "[package-name] [new-version] GitHub issues"
+Query: "[package-name] migration guide GitHub discussion"
+```
+- **WebFetch:**
+  ```
+  https://github.com/<org>/<package>/discussions
+  https://github.com/<org>/<package>/issues?q=is%3Aissue+milestone%3A<version>
+  ```
+- **Tìm:** Known bugs, limitations, roadmap
+
+#### 6. LinkedIn & Discord (Optional)
+```
+Query: "[package-name] [new-version] developer experience"
+```
+- **Tìm:** Professional opinions, enterprise experiences
+
+---
+
+### MẪU COMMUNITY RESEARCH REPORT:
+
+```markdown
+## Community Research: [package] [v1] → [v2]
+
+### Reddit Discussion Summary
+- **Thread:** [URL]
+- **Sentiment:** [Positive / Mixed / Negative]
+- **Key Points:**
+  - ✅ [Điều positive 1]
+  - ⚠️ [Điều cần lưu ý 1]
+  - ❌ [Điều negative 1]
+
+### StackOverflow Common Issues
+| Issue | Solution | Accepted? |
+|-------|----------|-----------|
+| [Error 1] | [Fix 1] | ✅ Yes |
+| [Error 2] | [Fix 2] | ❌ No |
+
+### Dev.to War Stories
+- **Article:** [Title] — [URL]
+- **Key Learnings:**
+  1. [Learning 1]
+  2. [Learning 2]
+
+### GitHub Issues to Watch
+- [#1234](URL) — [Issue title] — [Status: Open/Fixed/Closed]
+- [#5678](URL) — [Issue title] — [Status: Open/Fixed/Closed]
+
+### ⚠️ RED FLAGS FROM COMMUNITY
+- [Issue 1]: [Lý do đáng lo ngại]
+- [Issue 2]: [Lý do đáng lo ngại]
+
+### ✅ GREEN LIGHTS FROM COMMUNITY
+- [Positive 1]: [Chi tiết]
+- [Positive 2]: [Chi tiết]
+```
+
+---
+
+### Research Priority by Package Type:
+
+| Package Type | Primary Sources | Secondary Sources |
+|--------------|-----------------|-------------------|
+| React ecosystem (antd, next, redux) | Reddit r/reactjs, GitHub | StackOverflow, Dev.to |
+| Node.js utilities (lodash, express) | Reddit r/node, GitHub | StackOverflow |
+| Python (Django, Flask, FastAPI) | Reddit r/Python, GitHub | StackOverflow |
+| Go packages | Reddit r/golang, GitHub | Hacker News |
+| Frontend frameworks (Vue, Svelte) | Reddit cộng đồng riêng, Discord | GitHub |
+| AI/ML libraries | Reddit r/MachineLearning, GitHub | HuggingFace discussions |
+
+---
+
+### QUICK COMMAND REFERENCE:
+
+```bash
+# Fast Reddit search
+echo "https://www.reddit.com/search/?q=<package>+<version>+upgrade"
+
+# Fast StackOverflow
+echo "https://stackoverflow.com/search?q=<package>+<version>"
+
+# Fast Dev.to
+echo "https://dev.to/search?q=<package>+<version>"
+
+# GitHub Releases
+echo "https://github.com/<org>/<package>/releases"
+```
+
+---
+
+### OUTPUT INTEGRATION:
+
+**SAU KHI research xong, tích hợp vào CHANGELOG:**
+
+```markdown
+## [Package] [v1] → [v2]
+
+### 📋 Official Changes
+- [From changelog/release notes]
+
+### 💬 Community Feedback
+- **Reddit:** [Sentiment: X% positive] — [Key point]
+- **StackOverflow:** [N] questions, [M] issues reported
+- **Dev.to:** [N] articles
+
+### ⚠️  Community Warnings
+- [Warning 1 from Reddit/StackOverflow]
+- [Warning 2 from GitHub issues]
+
+### ✅ Community Endorsements
+- [Endorsement 1]
+- [Endorsement 2]
+```
+
 ### Version-by-Version Deep Analysis (MANDATORY for Major Updates)
 
 **KHI gặp major version jump (2+ major versions behind), phải phân tích từng bước:**
