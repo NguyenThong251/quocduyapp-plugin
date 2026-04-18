@@ -119,9 +119,10 @@ Breaking Changes:  [Yes / No]
     1. Tạo branch riêng
     2. Chạy build + tests
     3. Analyze source code (nếu cần sửa code)
-    4. [Dev server check nếu là frontend]
-    5. Hiển thị kết quả
-    6. Hỏi: push hay rollback?
+    4. Dev server check (nếu là frontend)
+    5. Auto-fix loop (3 attempts) nếu có lỗi
+    6. Hiển thị kết quả
+    7. Hỏi: push hay rollback?
 
 ───────────────────────────────────────────────────────────
 
@@ -279,7 +280,7 @@ fi
 echo "✅ Tests passed"
 ```
 
-### Step 5.5: Dev Server Runtime Check ⭐ (MỚI)
+### Step 5.5: Dev Server Runtime Check ⭐
 
 **Chỉ chạy nếu project là frontend (vite, next, react-scripts)**
 
@@ -320,15 +321,10 @@ if [ -n "$DEV_CMD" ]; then
     if [ $ERROR_COUNT -gt 0 ]; then
       echo "❌ DEV SERVER ERRORS DETECTED ($ERROR_COUNT issues)"
       echo ""
-      echo "=== Dev Server Log (last 30 lines) ==="
-      tail -30 dev-server.log
+      echo "=== Dev Server Log (last 50 lines) ==="
+      tail -50 dev-server.log
       echo ""
-      echo "⚠️  RUNTIME ERRORS FOUND — AUTO-ROLLING BACK"
-      kill $DEV_PID 2>/dev/null
-      git checkout package.json yarn.lock
-      yarn install 2>/dev/null
-      echo "⚠️ AUTO-ROLLED BACK"
-      exit 1
+      # → CHUYỂN SANG Step 5.6: Auto-Fix
     else
       echo "✅ No runtime errors detected"
       echo "   Dev server healthy at $DEV_URL"
@@ -336,16 +332,13 @@ if [ -n "$DEV_CMD" ]; then
   else
     echo "❌ Dev server failed to start at $DEV_URL"
     echo ""
-    echo "=== Dev Server Log (last 30 lines) ==="
-    tail -30 dev-server.log
-    kill $DEV_PID 2>/dev/null
-    git checkout package.json yarn.lock
-    yarn install 2>/dev/null
-    echo "⚠️ AUTO-ROLLED BACK — dev server failed to start"
-    exit 1
+    echo "=== Dev Server Log (last 50 lines) ==="
+    tail -50 dev-server.log
+    echo ""
+    # → CHUYỂN SANG Step 5.6: Auto-Fix
   fi
 
-  # Dọn dev server
+  # Dọn dev server trước khi fix
   kill $DEV_PID 2>/dev/null
   wait $DEV_PID 2>/dev/null
   echo "🧹 Dev server stopped"
@@ -353,6 +346,176 @@ else
   echo "ℹ️  No dev server detected — skipping runtime check"
 fi
 ```
+
+### Step 5.6: Auto-Fix Loop ⭐ (MỚI)
+
+**NẾU có lỗi → TỰ ĐỘNG FIX thay vì rollback ngay**
+
+```
+🔧 ATTEMPTING AUTO-FIX...
+   Attempt 1/3: [fix strategy]
+```
+
+**Loop 1-3 lần, mỗi lần:**
+1. Analyze lỗi từ log
+2. Apply fix phù hợp
+3. Re-run dev server
+4. Re-check — nếu pass → tiếp tục
+
+**CHỈ rollback khi đã thử 3 lần mà vẫn lỗi**
+
+```bash
+# Auto-fix loop - thử tối đa 3 lần
+FIX_ATTEMPT=0
+MAX_FIX_ATTEMPTS=3
+
+while [ $FIX_ATTEMPT -lt $MAX_FIX_ATTEMPTS ]; do
+  FIX_ATTEMPT=$((FIX_ATTEMPT + 1))
+  echo ""
+  echo "═══════════════════════════════════════════════════════"
+  echo "  🔧 AUTO-FIX ATTEMPT $FIX_ATTEMPT/$MAX_FIX_ATTEMPTS"
+  echo "═══════════════════════════════════════════════════════"
+
+  # Đọc lỗi từ log
+  ERRORS=$(tail -100 dev-server.log 2>/dev/null)
+
+  # PHÂN TÍCH LỖI VÀ FIX
+  echo "📋 Analyzing errors from dev-server.log..."
+
+  # 1. MISSING DEPENDENCY / MODULE NOT FOUND
+  if echo "$ERRORS" | grep -qiE "Module not found|Cannot find module|ENOENT|ERR_MODULE_NOT_FOUND"; then
+    MISSING_MODULE=$(echo "$ERRORS" | grep -iE "Module not found|Cannot find module|ENOENT" | grep -oE "'[^']+'|\"[^\"]+\"" | head -1 | tr -d "'\"")
+    if [ -n "$MISSING_MODULE" ]; then
+      echo "🔍 Missing module detected: $MISSING_MODULE"
+      # Thử install missing module
+      echo "   Trying to install missing dependency..."
+      yarn add "$MISSING_MODULE" 2>/dev/null || npm install "$MISSING_MODULE" 2>/dev/null
+      if [ $? -eq 0 ]; then
+        echo "✅ Installed: $MISSING_MODULE"
+        NEED_RERUN=true
+      else
+        echo "⚠️  Could not auto-install: $MISSING_MODULE"
+      fi
+    fi
+  fi
+
+  # 2. PEER DEPENDENCY MISSING
+  if echo "$ERRORS" | grep -qiE "peer dep|requires a peer|peer dep.*not satisfied"; then
+    echo "🔍 Peer dependency issue detected"
+    # Extract peer dep name
+    PEER_DEP=$(echo "$ERRORS" | grep -iE "requires a peer" | grep -oE "[a-z@/-]+@[0-9.x]+" | head -1)
+    if [ -n "$PEER_DEP" ]; then
+      echo "   Installing peer dependency: $PEER_DEP"
+      yarn add "$PEER_DEP" --dev 2>/dev/null || yarn add "$PEER_DEP" 2>/dev/null
+      if [ $? -eq 0 ]; then
+        echo "✅ Installed peer dep: $PEER_DEP"
+        NEED_RERUN=true
+      fi
+    fi
+  fi
+
+  # 3. DEPRECATED API / REMOVED
+  if echo "$ERRORS" | grep -qiE "deprecated|removed|cannot read property|undefined is not"; then
+    echo "🔍 Deprecated/removed API detected"
+    # Phân tích chi tiết lỗi
+    DEPRECATED_ERROR=$(echo "$ERRORS" | grep -iE "deprecated|removed|cannot read" | head -3)
+    echo "   Error: $DEPRECATED_ERROR"
+    echo ""
+    echo "⚠️  Manual fix required for deprecated API"
+    echo "   → Run: /qd-outdated to analyze breaking changes"
+    echo "   → Then fix code manually following Phase 6 rules"
+  fi
+
+  # 4. ESM/COMMONJS MISMATCH
+  if echo "$ERRORS" | grep -qiE "ERR_REQUIRE_ESM|require.*esm|dynamic import.*esm"; then
+    echo "🔍 ESM/CommonJS mismatch detected"
+    # Thử install ESM compatibility
+    echo "   Trying ESM compatibility fix..."
+    # Check nếu có --experimental-vm-modules hoặc tsconfig changes
+    echo "   ℹ️  ESM fix usually requires tsconfig/build config change"
+  fi
+
+  # 5. TYPESCRIPT / TYPE ERROR
+  if echo "$ERRORS" | grep -qiE "Type error|TypeScript|tc.*error"; then
+    echo "🔍 TypeScript error detected"
+    echo "   Running type check to get full error list..."
+    npx tsc --noEmit 2>&1 | head -30
+    echo ""
+    echo "⚠️  Type errors need manual fix — run tsc to see all errors"
+  fi
+
+  # 6. CONFIG / ENV ERROR
+  if echo "$ERRORS" | grep -qiE "config|process\.env|undefined environment"; then
+    echo "🔍 Configuration error detected"
+    # Check .env file
+    if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+      echo "   Copying .env.example to .env..."
+      cp .env.example .env
+      echo "✅ Created .env from .env.example"
+      NEED_RERUN=true
+    fi
+  fi
+
+  # NẾU CÓ THAY ĐỔI → RE-RUN DEV SERVER
+  if [ "$NEED_RERUN" = true ]; then
+    echo ""
+    echo "🔄 Re-running dev server to verify fix..."
+    $DEV_CMD > dev-server.log 2>&1 &
+    DEV_PID=$!
+    sleep $DEV_WAIT
+
+    # Kiểm tra lại
+    if curl -s --max-time 5 "$DEV_URL" > /dev/null 2>&1; then
+      NEW_ERRORS=$(grep -iE "Error:|Uncaught|ReferenceError|TypeError|SyntaxError|Cannot|failed|ENOENT" dev-server.log 2>/dev/null | grep -v "^info:\|^warn:\|^Warning:" | wc -l)
+      if [ $NEW_ERRORS -eq 0 ]; then
+        echo "✅ FIX SUCCESSFUL — Dev server running without errors"
+        kill $DEV_PID 2>/dev/null
+        wait $DEV_PID 2>/dev/null
+        break
+      else
+        echo "⚠️  Still has $NEW_ERRORS errors — will retry..."
+        kill $DEV_PID 2>/dev/null
+        NEED_RERUN=false
+      fi
+    else
+      echo "⚠️  Dev server still not responding — will retry..."
+      kill $DEV_PID 2>/dev/null
+      NEED_RERUN=false
+    fi
+  fi
+done
+
+# SAU 3 LẦN MÀ VẪN LỖI → ROLLBACK
+if [ "$NEED_RERUN" = false ] && [ $FIX_ATTEMPT -ge $MAX_FIX_ATTEMPTS ]; then
+  echo ""
+  echo "═══════════════════════════════════════════════════════"
+  echo "  ❌ AUTO-FIX FAILED AFTER $MAX_FIX_ATTEMPTS ATTEMPTS"
+  echo "═══════════════════════════════════════════════════════"
+  echo ""
+  echo "⚠️  ROLLING BACK — manual fix required"
+  echo ""
+  echo "   Next steps:"
+  echo "   1. Run: /qd-outdated to analyze breaking changes"
+  echo "   2. Fix code manually (Phase 6)"
+  echo "   3. Run: /qd-update <package> to retry"
+  echo ""
+  git checkout package.json yarn.lock
+  yarn install 2>/dev/null
+  echo "⚠️ AUTO-ROLLED BACK"
+  exit 1
+fi
+```
+
+**Summary: Auto-Fix Matrix**
+
+| Error Type | Auto-Fix Action |
+|------------|-----------------|
+| Missing module (ENOENT) | `yarn add <module>` |
+| Peer dependency missing | `yarn add <peer-dep>` |
+| Config/env missing | Copy `.env.example` → `.env` |
+| Deprecated API | Manual fix required |
+| TypeScript error | Manual fix + tsc check |
+| ESM mismatch | Manual config change |
 
 ---
 
@@ -548,8 +711,9 @@ yarn install 2>/dev/null
 - ❌ Không hỏi nhiều lần — chỉ 1 prompt đầu + 1 prompt cuối
 - ❌ Không update nhiều library cùng lúc
 - ❌ Không skip verification
-- ✅ Tự động rollback nếu bất kỳ check nào fail
 - ✅ Dev server check cho frontend projects
+- ✅ Auto-fix loop (3 attempts) thay vì rollback ngay
+- ✅ **Chỉ rollback khi đã thử 3 lần fix mà vẫn lỗi**
 - ✅ Mọi thay đổi trên branch riêng — rollback dễ dàng
 - ⚠️ **KHI CẦN SỬA CODE — BẮT BUỘC đọc hết source codebase trước** để match style/format/logic chuẩn
 
@@ -561,6 +725,7 @@ yarn install 2>/dev/null
 □ Confirm 1 lần duy nhất (Phase 1)
 □ Tự động chạy Phase 2-9 (không hỏi)
 □ Phân tích source code TRƯỚC khi sửa (Phase 6)
-□ Tự động rollback nếu fail
+□ Dev server check (Phase 5.5)
+□ Auto-fix loop 3 lần trước khi rollback (Phase 5.6)
 □ Final prompt: push hay rollback?
 ```
