@@ -118,9 +118,10 @@ Breaking Changes:  [Yes / No]
 ⚠️  Automated workflow sẽ:
     1. Tạo branch riêng
     2. Chạy build + tests
-    3. [Dev server check nếu là frontend]
-    4. Hiển thị kết quả
-    5. Hỏi: push hay rollback?
+    3. Analyze source code (nếu cần sửa code)
+    4. [Dev server check nếu là frontend]
+    5. Hiển thị kết quả
+    6. Hỏi: push hay rollback?
 
 ───────────────────────────────────────────────────────────
 
@@ -355,9 +356,94 @@ fi
 
 ---
 
-## Phase 6: Major Version Strategy (nếu cần)
+## Phase 6: Source Code Analysis (BẮT BUỘC khi cần sửa code)
 
-**Chỉ khi có breaking changes:**
+**⚠️ NẾU UPDATE ĐÒI HỎI SỬA CODE — LÀM THEO THỨ TỰ SAU:**
+
+### Step 6.1: Scan Source Codebase (TRƯỚC KHI SỬA BẤT CỨ GÌ)
+
+```bash
+echo "📖 Analyzing source codebase structure..."
+```
+
+**BẮT BUỘC đọc và hiểu TOÀN BỘ source code trước khi sửa:**
+
+1. **Cấu trúc thư mục** — hiểu layout, cách tổ chức files
+2. **Coding style** — indent (2/4 spaces), semicolon, quotes, naming conventions
+3. **Logic patterns** — cách viết async/await, error handling, state management
+4. **Component patterns** — structure của components, hooks usage, props typing
+5. **Naming conventions** — files, functions, variables, constants
+6. **Import order** — thứ tự imports (external → internal → relative)
+
+**Cách đọc source:**
+
+```bash
+# Đọc tất cả source files
+find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" \) \
+  ! -path "./node_modules/*" ! -path "./dist/*" ! -path "./build/*" \
+  ! -path "./.next/*" ! -path "./coverage/*" \
+  -exec echo "=== {} ===" \; -exec head -50 {} \;
+
+# Đọc config files để hiểu conventions
+cat tsconfig.json 2>/dev/null
+cat eslint.config.js 2>/dev/null || cat .eslintrc* 2>/dev/null
+cat prettier.config.js 2>/dev/null || cat .prettierrc* 2>/dev/null
+cat package.json | grep -A5 '"scripts"'
+```
+
+### Step 6.2: Identify Required Code Changes
+
+```bash
+echo "🔍 Identifying required code changes..."
+```
+
+**Liệt kê TẤT CẢ những gì cần thay đổi:**
+
+- Breaking API changes (deprecated functions, removed props)
+- Import path changes
+- Configuration updates
+- Migration của logic cũ sang logic mới
+
+### Step 6.3: Apply Code Changes (MATCH 100% STYLE)
+
+**⚠️ SỬA THEO CONVENTION CỦA SOURCE — KHÔNG THEO LIBRARY DOCS MỚI NHẤT**
+
+```bash
+# Khi sửa code, phải match:
+# - Indentation style (2/4 spaces) — xem tsconfig/eslint
+# - Quote style (' vs ") — xem .eslintrc
+# - Semicolon usage — xem .eslintrc
+# - Import order — xem existing imports
+# - Naming: camelCase/PascalCase/kebab-case
+# - Async pattern: .then() vs async/await
+# - Error handling: try/catch vs .catch()
+```
+
+**Ví dụ cách match style:**
+
+```
+# Nếu source dùng:
+import { useState } from 'react';
+const [count, setCount] = useState(0);
+
+# Thì code mới phải VIẾT Y CHƯỚC, không phải:
+# import * as React from 'react' (sai style)
+# const state = useState(0) (sai naming)
+```
+
+### Step 6.4: Verify Code Changes
+
+```bash
+echo "✅ Verifying code changes match codebase style..."
+yarn lint --fix 2>/dev/null
+yarn build 2>&1 | head -20
+```
+
+---
+
+## Phase 7: Major Version Strategy (nếu cần)
+
+**Chỉ khi có breaking changes — SAU KHI đã analyze source ở Phase 6:**
 
 ```bash
 # Thử tìm official codemod
@@ -370,7 +456,7 @@ npx <package>-codemod --help 2>/dev/null && {
 
 ---
 
-## Phase 7: Preventive Tooling (tùy chọn)
+## Phase 8: Preventive Tooling (tùy chọn)
 
 ```bash
 # Offer nhưng KHÔNG block
@@ -379,7 +465,7 @@ echo "🔧 Offer preventive tooling? (y/n)"
 
 ---
 
-## Phase 8: Commit
+## Phase 9: Commit
 
 ```bash
 git add package.json yarn.lock
@@ -465,6 +551,7 @@ yarn install 2>/dev/null
 - ✅ Tự động rollback nếu bất kỳ check nào fail
 - ✅ Dev server check cho frontend projects
 - ✅ Mọi thay đổi trên branch riêng — rollback dễ dàng
+- ⚠️ **KHI CẦN SỬA CODE — BẮT BUỘC đọc hết source codebase trước** để match style/format/logic chuẩn
 
 ---
 
@@ -472,7 +559,8 @@ yarn install 2>/dev/null
 
 ```
 □ Confirm 1 lần duy nhất (Phase 1)
-□ Tự động chạy Phase 2-7 (không hỏi)
+□ Tự động chạy Phase 2-9 (không hỏi)
+□ Phân tích source code TRƯỚC khi sửa (Phase 6)
 □ Tự động rollback nếu fail
 □ Final prompt: push hay rollback?
 ```
