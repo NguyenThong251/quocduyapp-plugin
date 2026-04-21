@@ -1,1309 +1,155 @@
 ---
 name: qd-outdated
-description: Audit outdated dependencies across any language. Generate CHANGELOG_DEPENDENCY_UPDATE.md with breaking changes, risk levels, and migration steps. Requires confirmation before proceeding to update.
+description: Audit outdated dependencies for multi-language projects, research breaking changes with search-first + documentation-lookup, then generate actionable update plans and roadmap files before any update.
 triggers:
   - /qd-outdated
   - check outdated
   - dependency audit
-  - library versions
-  - which packages need updating
-  - audit dependencies
   - changelog dependencies
+  - update plan dependencies
 ---
 
 # /qd-outdated
 
-You are a **middle-senior software developer** specializing in dependency management and library upgrade workflows for multi-language and multi-library projects. You strictly follow an 8-phase process to audit all third-party libraries, classify risks, and generate a detailed changelog for user review.
-
-## Your Role
-
-You are a dependency audit specialist. Your job is to:
-1. Detect project type and language
-2. Parse all dependency manifests
-3. Run outdated commands
-4. WebSearch changelogs and breaking changes
-5. Classify risk for each library
-6. Generate `CHANGELOG_DEPENDENCY_UPDATE.md` — a detailed changelog for user to review BEFORE any update happens
-7. Ask for user confirmation before proceeding
-
-## 8-Phase Workflow
-
-```
-Phase 1: Detect project type
-Phase 2: Read dependency manifest
-Phase 3: Identify package manager
-Phase 4: Run outdated command
-Phase 5: WebSearch changelog + breaking changes + CVE
-Phase 6: Analyze breaking changes
-Phase 7: Generate CHANGELOG_DEPENDENCY_UPDATE.md
-Phase 8: Recommend + preventive tooling
-```
-
----
-
-## Phase 1: Detect Project Type
-
-Scan the root directory for manifest files:
-
-```bash
-ls -la | grep -E "package.json|composer.json|go.mod|Cargo.toml|pom.xml|requirements.txt|pyproject.toml|*.csproj|Gemfile|build.gradle|Pipfile|Cargo.lock"
-```
-
-| Signal Found | Language | Package Manager |
-|---|---|---|
-| `package.json` | Node.js / React / React Native / PHP-Egg | yarn / npm / pnpm |
-| `composer.json` | PHP | Composer |
-| `requirements.txt` / `pyproject.toml` | Python | pip / Poetry / pipenv |
-| `go.mod` | Go | go |
-| `Cargo.toml` | Rust | cargo |
-| `pom.xml` | Java (Maven) | mvn |
-| `build.gradle` / `build.gradle.kts` | Java (Gradle) | gradle |
-| `*.csproj` / `Directory.Packages.props` | C# / .NET | dotnet |
-| `Gemfile` | Ruby | bundler |
-| `Pipfile` | Python | pipenv |
-
-**If no manifest found:** Report "No dependency manifest found in this project." and stop.
-
-**If multiple manifests found:** Audit each one separately and generate separate changelog sections.
-
----
-
-## Phase 2: Read Dependency Manifest
-
-```bash
-# Read package.json with jq if available
-cat package.json | jq '{name, dependencies, devDependencies}' 2>/dev/null
-
-# Fallback without jq
-grep -A 100 '"dependencies"' package.json | grep -B 100 '"devDependencies"' | head -80
-```
-
-Count total packages. Note:
-- Which are production dependencies
-- Which are dev dependencies
-- Any workspace/polyrepo packages
-
----
-
-## Phase 3: Identify Package Manager
-
-```bash
-# Detect in priority order
-if [ -f "yarn.lock" ]; then
-  PM=yarn
-  OUTDATED_CMD="yarn outdated"
-elif [ -f "pnpm-lock.yaml" ]; then
-  PM=pnpm
-  OUTDATED_CMD="pnpm outdated"
-elif [ -f "package-lock.json" ]; then
-  PM=npm
-  OUTDATED_CMD="npm outdated"
-elif [ -f "composer.lock" ]; then
-  PM=composer
-  OUTDATED_CMD="composer outdated --format=json"
-elif [ -f "poetry.lock" ]; then
-  PM=poetry
-  OUTDATED_CMD="poetry show --outdated"
-elif [ -f "go.sum" ]; then
-  PM=go
-  OUTDATED_CMD="go list -m -u all"
-elif [ -f "Cargo.lock" ]; then
-  PM=cargo
-  OUTDATED_CMD="cargo outdated 2>/dev/null || echo 'cargo-outdated not installed'"
-elif [ -f ".csproj" ]; then
-  PM=dotnet
-  OUTDATED_CMD="dotnet list package --outdated"
-elif [ -f "Gemfile.lock" ]; then
-  PM=bundler
-  OUTDATED_CMD="bundle outdated"
-fi
-```
+Audit only. Skill nay khong update package.
 
----
+## Muc tieu
 
-## Phase 4: Run Outdated Command
+1. Phat hien dependencies outdated tren nhieu ngon ngu.
+2. Research official docs + community signal truoc khi ket luan.
+3. Sinh tai lieu de user review truoc khi chay `/qd-update`.
 
-Run the appropriate command for detected PM:
+## Core Integrations
 
-```bash
-# Node.js / React / React Native
-yarn outdated 2>/dev/null || npm outdated 2>/dev/null || pnpm outdated 2>/dev/null
+- `search-first`: research truoc khi de xuat update strategy.
+- `documentation-lookup` (Context7): tra API moi/migration guide theo version.
+- `writing-plans`: tao roadmap dang phase + checklist chi tiet.
 
-# PHP
-composer outdated --format=json 2>/dev/null || composer outdated 2>/dev/null
-
-# Python (pip)
-pip list --outdated --format=json 2>/dev/null
-
-# Python (Poetry)
-poetry show --outdated 2>/dev/null
-
-# Python (pipenv)
-pipenv update --outdated 2>/dev/null
-
-# Go
-go list -m -u all 2>/dev/null
-
-# Rust
-cargo outdated 2>/dev/null || echo "cargo-outdated not installed. Run: cargo install cargo-outdated"
-
-# Java (Maven)
-mvn versions:display-dependency-updates 2>/dev/null || echo "Maven not available"
-
-# Java (Gradle)
-gradle dependencyUpdates 2>/dev/null || echo "Gradle not available"
-
-# .NET
-dotnet list package --outdated 2>/dev/null || echo "dotnet not available"
-
-# Ruby
-bundle outdated 2>/dev/null || echo "bundler not available"
-```
-
-Parse output: for each package note current version, wanted version (latest minor), latest version (may be major).
-
----
-
-## Phase 5: WebSearch Changelog + Version-by-Version Analysis
-
-**For EACH outdated package**, search:
-
-1. **Changelog search:**
-   ```
-   Query: "[package-name] changelog [latest-version]"
-   ```
-
-2. **Breaking changes (for major jumps):**
-   ```
-   Query: "[package-name] breaking changes [old-version] to [new-version]"
-   ```
-
-3. **Security / CVE:**
-   ```
-   Query: "[package-name] CVE security vulnerability [current-version]"
-   ```
-
-4. **Official release notes:**
-   ```
-   Query: "[package-name] [new-version] release notes"
-   ```
-
-**Fallback if WebSearch fails:** Use npm/npmjs.com directly:
-```bash
-npm view <package>@latest version 2>/dev/null
-npm view <package> releases --json 2>/dev/null | head -20
-npm view <package> homepage 2>/dev/null
-```
-
----
-
-### Community & Discussion Sources (MANDATORY for Major Updates)
-
-**KHI major version jump, PHẢI tìm kiếm thêm từ cộng đồng:**
-
-#### 1. Reddit — Real User Experiences
-```
-Query: "[package-name] [new-version] reddit discussion"
-Query: "[package-name] upgrade [old] to [new] worth it reddit"
-Query: "[package-name] [new-version] problems issues reddit"
-```
-- **Tìm:** Thực tế user gặp issues gì khi upgrade
-- **Sites:** reddit.com/r/reactjs, reddit.com/r/node, reddit.com/r/webdev, reddit.com/r/Python, v.v.
-- **WebFetch useful threads:**
-  ```
-  https://reddit.com/r/reactjs/search/?q=<package>+<version>
-  https://reddit.com/r/webdev/search/?q=<package>+upgrade
-  ```
-
-#### 2. Dev.to — Tutorials & War Stories
-```
-Query: "[package-name] [new-version] dev.to migration guide"
-Query: "[package-name] upgrade problems dev.to"
-Query: "[package-name] [new-version] breaking changes tutorial"
-```
-- **Tìm:** Hướng dẫn migrate chi tiết từ dev đã trải qua
-- **Site:** dev.to
-
-#### 3. Stack Overflow — Common Issues
-```
-Query: "[package-name] [new-version] stackoverflow"
-Query: "[package-name] TypeError Error stackoverflow"
-Query: "[package-name] breaking change stackoverflow"
-```
-- **Tìm:** Lỗi phổ biến khi upgrade, cách fix
-- **Site:** stackoverflow.com
-
-#### 4. News & Trends
-```
-Query: "[package-name] [new-version] news announcement"
-Query: "[package-name] [year] trends best practices"
-```
-- **Sites:**
-  - hacker-news (news.ycombinator.com)
-  - daily.dev (daily.dev)
-  - lobste.rs
-- **Tìm:** Xu hướng, so sánh với alternatives
-
-#### 5. GitHub Issues & Discussions
-```
-Query: "[package-name] [new-version] GitHub issues"
-Query: "[package-name] migration guide GitHub discussion"
-```
-- **WebFetch:**
-  ```
-  https://github.com/<org>/<package>/discussions
-  https://github.com/<org>/<package>/issues?q=is%3Aissue+milestone%3A<version>
-  ```
-- **Tìm:** Known bugs, limitations, roadmap
-
-#### 6. LinkedIn & Discord (Optional)
-```
-Query: "[package-name] [new-version] developer experience"
-```
-- **Tìm:** Professional opinions, enterprise experiences
-
----
-
-### MẪU COMMUNITY RESEARCH REPORT:
-
-```markdown
-## Community Research: [package] [v1] → [v2]
-
-### Reddit Discussion Summary
-- **Thread:** [URL]
-- **Sentiment:** [Positive / Mixed / Negative]
-- **Key Points:**
-  - ✅ [Điều positive 1]
-  - ⚠️ [Điều cần lưu ý 1]
-  - ❌ [Điều negative 1]
-
-### StackOverflow Common Issues
-| Issue | Solution | Accepted? |
-|-------|----------|-----------|
-| [Error 1] | [Fix 1] | ✅ Yes |
-| [Error 2] | [Fix 2] | ❌ No |
-
-### Dev.to War Stories
-- **Article:** [Title] — [URL]
-- **Key Learnings:**
-  1. [Learning 1]
-  2. [Learning 2]
-
-### GitHub Issues to Watch
-- [#1234](URL) — [Issue title] — [Status: Open/Fixed/Closed]
-- [#5678](URL) — [Issue title] — [Status: Open/Fixed/Closed]
-
-### ⚠️ RED FLAGS FROM COMMUNITY
-- [Issue 1]: [Lý do đáng lo ngại]
-- [Issue 2]: [Lý do đáng lo ngại]
-
-### ✅ GREEN LIGHTS FROM COMMUNITY
-- [Positive 1]: [Chi tiết]
-- [Positive 2]: [Chi tiết]
-```
-
----
-
-### Research Priority by Package Type:
-
-| Package Type | Primary Sources | Secondary Sources |
-|--------------|-----------------|-------------------|
-| React ecosystem (antd, next, redux) | Reddit r/reactjs, GitHub | StackOverflow, Dev.to |
-| Node.js utilities (lodash, express) | Reddit r/node, GitHub | StackOverflow |
-| Python (Django, Flask, FastAPI) | Reddit r/Python, GitHub | StackOverflow |
-| Go packages | Reddit r/golang, GitHub | Hacker News |
-| Frontend frameworks (Vue, Svelte) | Reddit cộng đồng riêng, Discord | GitHub |
-| AI/ML libraries | Reddit r/MachineLearning, GitHub | HuggingFace discussions |
-
----
-
-### QUICK COMMAND REFERENCE:
-
-```bash
-# Fast Reddit search
-echo "https://www.reddit.com/search/?q=<package>+<version>+upgrade"
-
-# Fast StackOverflow
-echo "https://stackoverflow.com/search?q=<package>+<version>"
-
-# Fast Dev.to
-echo "https://dev.to/search?q=<package>+<version>"
-
-# GitHub Releases
-echo "https://github.com/<org>/<package>/releases"
-```
-
----
-
-### OUTPUT INTEGRATION:
-
-**SAU KHI research xong, tích hợp vào CHANGELOG:**
-
-```markdown
-## [Package] [v1] → [v2]
-
-### 📋 Official Changes
-- [From changelog/release notes]
-
-### 💬 Community Feedback
-- **Reddit:** [Sentiment: X% positive] — [Key point]
-- **StackOverflow:** [N] questions, [M] issues reported
-- **Dev.to:** [N] articles
-
-### ⚠️  Community Warnings
-- [Warning 1 from Reddit/StackOverflow]
-- [Warning 2 from GitHub issues]
-
-### ✅ Community Endorsements
-- [Endorsement 1]
-- [Endorsement 2]
-```
-
-### Version-by-Version Deep Analysis (MANDATORY for Major Updates)
-
-**KHI gặp major version jump (2+ major versions behind), phải phân tích từng bước:**
-
-```bash
-# 1. Lấy danh sách tất cả versions
-npm view <package> versions --json 2>/dev/null | jq '.[]' | tail -20
-
-# 2. Với mỗi version trong chain, tìm breaking changes
-npm view <package>@<version> description 2>/dev/null
-npm view <package>@<version> peerDependencies 2>/dev/null
-
-# 3. Tìm changelog trên GitHub releases
-echo "https://github.com/<org>/<package>/releases"
-```
-
-**MẪU PHÂN TÍCH CHI TIẾT CHO TỪNG VERSION:**
-
-```markdown
-### [package] Version Chain Analysis
-
-**Current:** [1.x.x] → **Target:** [3.x.x] (2 major jumps)
-
-#### Phase 1: [1.x.x] → [2.x.x]
-- **Released:** [date]
-- **Days since:** [N] days
-- **Changes:**
-  - ✅ NEW: [feature 1] — [giải thích ngắn]
-  - ✅ NEW: [feature 2] — [giải thích ngắn]
-  - ⚠️  DEPRECATED: [API] — sẽ bị xóa ở [version]
-  - 🔴 BREAKING: [API] — cần thay thế bằng [new API]
-  - 🔴 BREAKING: [behavior] — thay đổi từ [old] thành [new]
-- **Migration Required:**
-  1. [Migration step 1]
-  2. [Migration step 2]
-- **Risk:** 🟡 Medium (codemod available)
-- **Test Coverage Needed:** [unit/integration/e2e]
-
-#### Phase 2: [2.x.x] → [3.x.x]
-- **Released:** [date]
-- **Days since:** [N] days
-- **Changes:**
-  - ✅ NEW: [feature 1]
-  - 🔴 BREAKING: [API change]
-  - 🔴 BREAKING: [behavior change]
-  - ⚠️  DEPRECATED: [will be removed in 4.x]
-- **Migration Required:**
-  1. [Migration step 1]
-  2. [Migration step 2]
-  3. [Migration step 3]
-- **Risk:** 🔴 High (no codemod, manual rewrite needed)
-- **Test Coverage Needed:** [full regression]
-
-#### Dependency Chain:
-```
-[1.x.x] requires:
-  - [dep1]@^[version]
-  - [dep2]@^[version]
-
-[2.x.x] requires:
-  - [dep1]@^[new-version]  ← also outdated!
-  - [new-dep]@^[version]    ← NEW dependency
-
-[3.x.x] requires:
-  - [dep1]@^[new-version]
-  - [dep2]@^[new-version]  ← also outdated!
-  - [dep3]@^[version]      ← NEW peer dependency
-```
-```
-
-**ĐÁNH GIÁ TỔNG HỢP:**
-
-```markdown
-### Effort Assessment: [package] [1.x] → [3.x]
-
-| Aspect | Value |
-|--------|-------|
-| Total Phases | 2 |
-| Estimated Time | [X-Y hours] |
-| Codemod Available | [Yes: tool / No] |
-| Risk Level | [Low/Medium/High] |
-| Can Test Incrementally | [Yes/No] |
-| Rollback Possible | [Yes/No] |
-
-### RECOMMENDATION:
-
-**IF** [user priority is safety]:
-  → Follow Phase 1 → Phase 2 with full testing between each
-
-**IF** [user priority is speed]:
-  → Use codemod + batch update + full regression test
-
-**IF** [effort > value]:
-  → Consider DEFER (add to DEPENDENCY-REPORT.md for future review)
-```
-
----
-
-**Extract for each package:**
-- Latest version number
-- Release date
-- Major breaking changes (if any)
-- Security fixes (CVE numbers if any)
-- Migration steps if breaking
-
----
-
-## Phase 6: Analyze Breaking Changes
-
-Classify each outdated package:
-
-| Level | Trigger | Action |
-|---|---|---|
-| 🔴 **Critical (CVE)** | Security vulnerability detected | Update immediately — no debate |
-| 🔴 **Major (2+ behind)** | Major version, 2+ versions behind | Incremental migration required — no big bang |
-| 🟡 **Major (1 behind)** | Major version, 1 version behind | Codemod-assisted migration |
-| 🟡 **Minor** | Minor version jump (1.2 → 1.3) | Test regression required |
-| 🟢 **Patch** | Patch version (1.2.3 → 1.2.4) | Safe to update |
-
-**Flag for codemod availability:**
-```bash
-# Search for official codemod
-npx <package>-codemod --help 2>/dev/null
-# Example: npx react-router-v6-codemod
-# Example: npx @ant-design/codemod-v5
-```
-
----
-
-## Phase 6.5: Source Code Analysis (MANDATORY)
-
-**TRƯỚC KHI KẾT LUẬN, phải đọc thực tế source code để đánh giá impact:**
-
-### Step 6.5.1: Scan Usage in Codebase
-
-```bash
-# 1. Tìm tất cả imports/requires của package
-echo "=== SCANNING USAGE: [package] ==="
-
-# Node.js / JS / TS
-grep -rn "from ['\"]<package>['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l
-grep -rn "require.*['\"]<package>['\"]" --include="*.js" --include="*.ts" 2>/dev/null | wc -l
-
-# Vue
-grep -rn "from ['\"]<package>['\"]" --include="*.vue" 2>/dev/null | wc -l
-
-# PHP
-grep -rn "use <package>" --include="*.php" 2>/dev/null | wc -l
-
-# Python
-grep -rn "import <package>" --include="*.py" 2>/dev/null | wc -l
-```
-
-### Step 6.5.2: Analyze Usage Patterns
-
-```bash
-# 2. List tất cả files sử dụng package
-echo "=== FILES USING [package] ==="
-grep -rln "from ['\"]<package>['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null
-
-# 3. Xem chi tiết cách sử dụng (import patterns)
-echo "=== IMPORT PATTERNS ==="
-grep -rn "from ['\"]<package>['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | head -30
-
-# 4. Kiểm tra named imports cụ thể
-echo "=== NAMED IMPORTS ==="
-grep -rn "import {" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | grep "<package>" | head -20
-```
-
-### Step 6.5.3: Assess Impact on Project
-
-```bash
-# 5. Đếm tổng files trong project
-TOTAL_FILES=$(find . -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" 2>/dev/null | grep -v node_modules | wc -l)
-echo "Total source files: $TOTAL_FILES"
-
-# 6. Tính % impact
-USAGE_COUNT=$(grep -rln "from ['\"]<package>['\"]" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l)
-IMPACT_PERCENT=$(echo "scale=2; $USAGE_COUNT * 100 / $TOTAL_FILES" | bc)
-echo "Impact: $IMPACT_PERCENT% of files"
-
-# 7. Kiểm tra devDependencies vs dependencies
-echo "=== DEPENDENCY TYPE ==="
-grep "\"<package>\"" package.json | grep -v devDependencies && echo "→ Production" || echo "→ Dev dependency"
-```
-
-### Step 6.5.4: Find Breaking Changes Impact
-
-```bash
-# 8. Kiểm tra deprecated APIs đang dùng
-echo "=== CHECKING DEPRECATED APIS ==="
-grep -rn "deprecated\|will be removed" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" 2>/dev/null | grep "<package>" | head -10
-
-# 9. Kiểm tra peer dependencies
-echo "=== CHECKING PEER DEPS ==="
-npm view <package>@<new-version> peerDependencies 2>/dev/null
-```
-
-### Step 6.5.5: Generate Impact Report
-
-```markdown
-## 📊 Source Code Impact Report: [package]
-
-**Current:** [v1.x.x] → **Target:** [v2.x.x]
-
-### Usage Statistics
-
-| Metric | Value |
-|--------|-------|
-| Files using this package | [N] / [Total] ([X]%) |
-| Total import statements | [N] |
-| Type | Production / Dev dependency |
-
-### How [package] is Used in This Project
-
-| FILE | USAGE PATTERN |
-|------|---------------|
-| src/components/Button.tsx | import { Button } from 'antd' |
-| src/pages/Home.tsx | import { Layout } from 'antd' |
-| src/utils/helpers.ts | import _ from 'lodash' |
-
-### ⚠️ Breaking Changes Affecting This Project
-
-| API | Status in New | Used In | Migration |
-|-----|---------------|---------|-----------|
-| `oldAPI()` | ❌ REMOVED | file:15 | Use `newAPI()` |
-| `deprecatedFn()` | ⚠️ DEPRECATED | file:23 | Use `[newFn]` |
-
-### Project-Specific Assessment
-
-```markdown
-### ✅ PROS (ƯU ĐIỂM)
-
-1. **Performance** — [details]
-2. **Feature We Need** — [use case]
-3. **Security Fixes** — [CVEs]
-
-### ❌ CONS (NHƯỢC ĐIỂM)
-
-1. **Breaking APIs** — [N] files need changes
-2. **Migration Effort** — [X hours]
-3. **Test Gap** — need more tests for [areas]
-```
-
-### 📈 RECOMMENDATION MATRIX
-
-| Factor | Score (1-5) | Weight | Result |
-|--------|-------------|--------|--------|
-| Benefits (features) | [X] | [W] | [score×weight] |
-| Breaking changes | [X] | [W] | [score×weight] |
-| Effort to migrate | [X] | [W] | [score×weight] |
-| Security urgency | [X] | [W] | [score×weight] |
-| **TOTAL** | | | [sum] |
-```
-
----
-
-### Step 6.5.6: FINAL VERDICT
-
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║  🔬 SOURCE ANALYSIS: [package] [v1] → [v2]                       ║
-╠══════════════════════════════════════════════════════════════════════╣
-║  📊 IMPACT: [N] files affected ([X]%) | [N] APIs to migrate      ║
-║                                                                      ║
-║  ✅ PROS:                                                          ║
-║  • [Pro 1]                                                         ║
-║  • [Pro 2]                                                         ║
-║                                                                      ║
-║  ❌ CONS:                                                          ║
-║  • [Con 1]                                                         ║
-║  • [Con 2]                                                         ║
-║                                                                      ║
-║  ╔════════════════════════════════════════════════════════════╗   ║
-║  ║  🟢 RECOMMEND: UPGRADE NOW — [brief reason]                 ║   ║
-║  ║  → Run: /qd-update <package>                                ║   ║
-║  ╚════════════════════════════════════════════════════════════╝   ║
-║                                                                      ║
-║  ╔════════════════════════════════════════════════════════════╗   ║
-║  ║  🟡 CAUTION: UPGRADE WITH CARE — [brief reason]            ║   ║
-║  ║  → Follow phased approach, test thoroughly                 ║   ║
-║  ╚════════════════════════════════════════════════════════════╝   ║
-║                                                                      ║
-║  ╔════════════════════════════════════════════════════════════╗   ║
-║  ║  🔴 DEFER/ABANDON — [brief reason]                         ║   ║
-║  ║  → Add to backlog, review in [X months]                    ║   ║
-║  ╚════════════════════════════════════════════════════════════╝   ║
-╚══════════════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Phase 7: Generate CHANGELOG_DEPENDENCY_UPDATE.md
-
-Create a detailed changelog file. This is the CORE output of `/qd-outdated`:
+## 10-Phase Workflow
+
+### Phase 1 - Detect project and manifests
+
+Quet cac file: `package.json`, `composer.json`, `pyproject.toml`, `requirements.txt`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`, `*.csproj`, `Gemfile`.
+
+Neu co nhieu manifests, audit tung nhom rieng.
+
+### Phase 2 - Detect package manager and run outdated
+
+Chon dung command theo lockfile/manifest:
+
+- Node: `yarn outdated` / `npm outdated` / `pnpm outdated`
+- PHP: `composer outdated`
+- Python: `pip list --outdated` / `poetry show --outdated`
+- Go: `go list -m -u all`
+- Rust: `cargo outdated`
+- Java: Maven/Gradle dependency updates
+- .NET: `dotnet list package --outdated`
+- Ruby: `bundle outdated`
+
+### Phase 3 - Source impact scan
+
+Voi tung package outdated:
+
+1. Dem so file dang su dung package.
+2. Liet ke usage pattern chinh.
+3. Danh gia impact: `low`, `medium`, `high`.
+
+### Phase 4 - Search-first research (bat buoc)
+
+Nghien cuu theo thu tu:
+
+1. Official changelog/release notes.
+2. Breaking changes.
+3. CVE/security notes.
+4. Codemod/migration tooling.
+5. Community signals (GitHub issues, StackOverflow, Reddit, Dev.to).
+
+### Phase 5 - Documentation lookup via Context7 (bat buoc cho major)
+
+Khi co major update hoac API thay doi:
+
+1. Resolve library ID.
+2. Query docs cho migration/API moi.
+3. Trich snippet migration quan trong vao bao cao.
+
+### Phase 6 - Risk classification
+
+- `Critical`: CVE/security urgent.
+- `Major`: co breaking changes.
+- `Minor`: behavior/feature changes co kha nang anh huong.
+- `Patch`: low-risk.
+
+### Phase 7 - Decision matrix
+
+Moi package phai co:
+
+- Benefit vs cost.
+- Estimated effort.
+- Test scope de xuat.
+- Rollback complexity.
+- Verdict: `upgrade-now` / `upgrade-with-care` / `defer`.
+
+### Phase 8 - Generate plan docs (writing-plans style)
+
+Luon sinh 2 file:
+
+1. `CHANGELOG_DEPENDENCY_UPDATE.md`
+2. `UPDATE-ROADMAP.md`
+
+`UPDATE-ROADMAP.md` bat buoc co:
+
+- Phase-by-phase command.
+- Verification gate sau tung phase.
+- Stop/rollback criteria.
+- Uoc luong effort theo package.
+
+### Phase 9 - Recommend execution path
+
+Thu tu de xuat:
+
+1. Security updates.
+2. Low-risk patch/minor.
+3. Major updates (phased).
+4. Deferred backlog.
+
+### Phase 10 - Handoff to qd-update and qd-debugging
+
+Report ket thuc phai chi ro:
+
+- Package nao chay truc tiep `/qd-update`.
+- Package nao nen chay `/qd-update` + `/qd-debugging` ngay sau update.
+
+## Required Output Template
 
 ```markdown
 # CHANGELOG: Dependency Update Report
 
-**Project:** [Project Name]
-**Generated:** [Date]
-**Language:** [Node.js / PHP / Python / Go / Rust / etc.]
-**Package Manager:** [yarn / npm / pnpm / Composer / pip / etc.]
-**Total:** [N] packages | [X] outdated
-
----
-
 ## Executive Summary
+- Total packages: X
+- Outdated: Y
+- Critical/Major/Minor/Patch: A/B/C/D
 
-| Risk Level | Count | Action |
-|------------|-------|--------|
-| 🔴 Critical (CVE) | N | Update immediately |
-| 🔴 Major (breaking) | N | Separate branch + migration sprint |
-| 🟡 Minor | N | Test regression before updating |
-| 🟢 Patch | N | Safe to update |
-| ✅ Up-to-date | N | — |
+## Package Analysis
+### <package> <old> -> <new>
+- Risk:
+- Source impact:
+- Breaking changes:
+- Context7 migration notes:
+- Community warnings:
+- Recommendation:
 
----
+## Recommended Execution Order
+1. ...
+2. ...
 
-## 🔴 Critical Security Updates
-
-> ⚠️ **Action required within 24 hours**
-
-| Package | Current | Latest | CVE | Severity | Description |
-|---------|---------|--------|-----|----------|-------------|
-| [name] | [v] | [v] | CVE-XXXX-XXXX | [High/Critical] | [Description] |
-
----
-
-## 🔴 Major Updates (Breaking Changes)
-
-> ⚠️ **Separate branch + migration sprint required**
-
-### [Package Name]
-
-| Property | Value |
-|----------|-------|
-| Current | [1.x.x] |
-| Latest | [2.x.x] |
-| Breaking? | Yes |
-| Versions behind | [N] |
-
-**Breaking Changes:**
-- [Breaking change 1]
-- [Breaking change 2]
-- [Breaking change 3]
-
-**Migration Steps:**
-1. [Step 1]
-2. [Step 2]
-3. [Step 3]
-
-**Codemod Available?**
-- [ ] Yes: `npx <package>-codemod`
-- [ ] No — manual migration required
-
-**Risk Assessment:**
-- Impact scope: [High / Medium / Low]
-- Estimated effort: [X hours / X days]
-- Can roll back: [Yes / No]
-
----
-
-## 🟡 Minor Updates
-
-### [Package Name]
-
-| Property | Value |
-|----------|-------|
-| Current | [1.2.x] |
-| Latest | [1.3.x] |
-| Change type | New features |
-| Deprecations | [List if any] |
-
-**New Features:**
-- [Feature 1]
-- [Feature 2]
-
-**Breaking Changes:**
-- None
-
-**Migration Steps:**
-1. Update package
-2. Run tests
-3. Verify functionality
-
----
-
-## 🟢 Patch Updates
-
-| Package | Current | Latest | Bug Fixes |
-|---------|---------|--------|-----------|
-| [name] | 1.2.3 | 1.2.4 | Bug fix description |
-| [name] | 2.0.1 | 2.0.2 | Security fix |
-
----
-
-## ✅ Up-to-date Packages
-
-[N] packages already at the latest version:
-
-- [package-1]
-- [package-2]
-- ...
-
----
-
-## Recommended Update Order
-
-1. **Immediate (P0 — < 24h)**
-   - [ ] Security CVE updates
-
-2. **This Sprint (P1 — 2-4 weeks)**
-   - [ ] Major updates → separate branch
-
-3. **Next Sprint (P2 — 1-2 weeks)**
-   - [ ] Minor updates → test regression
-
-4. **Later (P3 — quarterly)**
-   - [ ] Patch updates
-
----
-
-## Update Roadmap with Incremental Phases
-
-**Mỗi major package update CẦN được chia thành từng phase rõ ràng. Đây là roadmap chi tiết:**
-
-### MẪU ROADMAP CHO 1 PACKAGE:
-
-```markdown
-## 🔄 Update Roadmap: [package-name]
-
-**Current:** [1.x.x] | **Target:** [3.x.x]
-**Package Manager:** [yarn/npm/pnpm]
-**Total Phases:** 2
-
-═══════════════════════════════════════════════════════════════════════
-PHASE 1: [1.x.x] → [2.x.x]
-═══════════════════════════════════════════════════════════════════════
-
-📋 OBJECTIVE:
-   Upgrade from [1.x.x] to [2.x.x]
-
-🔧 COMMAND:
-   yarn upgrade <package>@^2.x
-
-📊 WHAT CHANGES:
-   - ✅ NEW: [feature 1] — [giải thích ngắn]
-   - ✅ NEW: [feature 2] — [giải thích ngắn]
-   - 🔴 BREAKING: [old API] → [new API] — [cách migrate]
-   - 🔴 BREAKING: [behavior] — [thay đổi gì]
-   - ⚠️  DEPRECATED: [x] — [sẽ bị xóa ở version nào]
-
-🧪 VERIFY:
-   1. yarn build
-   2. yarn test --run
-   3. yarn lint
-   4. npm run type-check  (nếu có)
-
-⏱️  ESTIMATED TIME: [X hours]
-
-✅ CRITERIA TO PASS:
-   - [ ] Build passed
-   - [ ] All tests passed
-   - [ ] No breaking behavior reported
-   - [ ] Manual smoke test passed
-
-═══════════════════════════════════════════════════════════════════════
-PHASE 2: [2.x.x] → [3.x.x]
-═══════════════════════════════════════════════════════════════════════
-
-📋 OBJECTIVE:
-   Upgrade from [2.x.x] to [3.x.x]
-
-🔧 COMMAND:
-   yarn upgrade <package>@^3.x
-
-📊 WHAT CHANGES:
-   - ✅ NEW: [feature 1]
-   - 🔴 BREAKING: [old API] → [new API]
-   - 🔴 BREAKING: [behavior]
-   - ⚠️  DEPRECATED: [x]
-
-🧪 VERIFY:
-   1. Clean artifacts: rm -rf dist .next tsconfig.tsbuildinfo
-   2. yarn build
-   3. yarn test --run
-   4. Manual smoke test
-
-⏱️  ESTIMATED TIME: [X hours]
-
-✅ CRITERIA TO PASS:
-   - [ ] Build passed
-   - [ ] All tests passed
-   - [ ] Migration steps verified
-   - [ ] Manual smoke test passed
-
-═══════════════════════════════════════════════════════════════════════
-📊 DECISION SUPPORT: NÊN UPGRADE KHÔNG?
-═══════════════════════════════════════════════════════════════════════
-
-**TRƯỚC KHI CHẠY phase, phải đánh giá:**
-
+## Handoff
+- Run: /qd-update <package>
+- If runtime/build/dev errors: run /qd-debugging
 ```
-╔══════════════════════════════════════════════════════════════════════╗
-║  🔍 DECISION CHECK: [package] [v1] → [v2]                        ║
-╚══════════════════════════════════════════════════════════════════════╝
-
-📋 TL;DR — SO SÁNH NHANH:
-
-┌──────────────────────┬─────────────────┬─────────────────┐
-│ Metric               │ Version Cũ      │ Version Mới     │
-├──────────────────────┼─────────────────┼─────────────────┤
-│ Bundle Size (JS)     │ [X] KB          │ [Y] KB          │
-│ Bundle Size (CSS)    │ [X] KB          │ [Y] KB          │
-│ TypeScript Support   │ [Yes/No/Partial]│ [Yes/No/Full]  │
-│ Tree Shaking        │ [Yes/No]        │ [Yes/No]        │
-│ ESM Support         │ [Yes/No]        │ [Yes/No]        │
-│ SSR Compatible      │ [Yes/No]        │ [Yes/No]        │
-│ Performance         │ [Baseline]      │ [+/-X%]         │
-│ Security Fixes      │ [N] CVEs        │ [N] CVEs        │
-│ Breaking APIs       │ —               │ [N] removed      │
-│ New Features        │ —               │ [N] added       │
-│ Deprecated APIs     │ [N]             │ [N]             │
-└──────────────────────┴─────────────────┴─────────────────┘
-
-═══════════════════════════════════════════════════════════════════════
-✅ NÊN UPGRADE NẾU:
-═══════════════════════════════════════════════════════════════════════
-
-  ✓ Security: Có CVE mới — vá lỗ hổng bảo mật
-  ✓ Performance: Cải thiện đáng kể (>10% faster)
-  ✓ Bundle: Giảm kích thước (tree shaking tốt hơn)
-  ✓ Support: Version cũ sắp hết hỗ trợ (EOL)
-  ✓ Compatibility: Tương thích tốt hơn với các library khác
-  ✓ Features: Có feature cần thiết cho roadmap hiện tại
-  ✓ Maintenance: Giảm technical debt đáng kể
-
-═══════════════════════════════════════════════════════════════════════
-⚠️  CÂN NHẮC NẾU:
-═══════════════════════════════════════════════════════════════════════
-
-  ⚠ Breaking APIs > 5 — effort quá lớn so với lợi ích
-  ⚠ Bundle size tăng > 10% — cân nhắc lazy loading
-  ⚠ Peer deps mới — có thể kéo theo nhiều updates khác
-  ⚠ Migration effort > 1 week — cân nhắc defer
-  ⚠ Team size nhỏ — không đủ resource để test kỹ
-  ⚠ Project giai đoạn production — chờ release xong
-
-═══════════════════════════════════════════════════════════════════════
-❌ KHÔNG NÊN UPGRADE NẾU:
-═══════════════════════════════════════════════════════════════════════
-
-  ✗ Không có feature mới cần thiết
-  ✗ Breaking changes quá nhiều, không có codemod
-  ✗ Effort > value (mất 2 tuần cho 1 improvement nhỏ)
-  ✗ Project đang active development — gây conflict
-  ✗ Team không có bandwidth để test regression
-
-═══════════════════════════════════════════════════════════════════════
-💡 LƯU Ý KHI LÀM:
-═══════════════════════════════════════════════════════════════════════
-
-  1. ⏰ THỜI GIAN:
-     - Patch: 15-30 phút
-     - Minor: 30-60 phút + test
-     - Major (1 jump): 1-4 giờ + test + possible codemod
-     - Major (2+ jumps): 1-3 ngày (chia phase)
-
-  2. 🔧 CHỈ SỐ CẦN THEO DÕI:
-     - Build time (before vs after)
-     - Bundle size (JS + CSS)
-     - Test pass rate
-     - Runtime performance
-     - Memory usage
-
-  3. 🚨 RED FLAGS CẦN DỪNG LẠI:
-     - Build fail sau khi đã fix hết breaking changes
-     - Test fail > 10% (tỷ lệ quá cao)
-     - Bundle size tăng > 20%
-     - Regression nghiêm trọng (auth, payment, core flow)
-
-  4. 📝 CHECKLIST TRƯỚC KHI BẮT ĐẦU:
-     - [ ] Backup/snapshot đã tạo
-     - [ ] Changelog đã đọc kỹ
-     - [ ] Breaking changes đã map hết
-     - [ ] Codemod đã check (nếu có)
-     - [ ] Team đã notified (nếu cần)
-     - [ ] Timeline đã estimate
-     - [ ] Rollback plan đã ready
-
-═══════════════════════════════════════════════════════════════════════
-🎯 QUICK DECISION:
-
-  Type "yes"  → Tiến hành upgrade theo phase
-  Type "plan" → Xem chi tiết từng step
-  Type "skip" → Bỏ qua, chuyển package tiếp theo
-  Type "defer"→ Đánh dấu defer, làm sau
-═══════════════════════════════════════════════════════════════════════
-```
-
----
-
-**CÁCH TẠO TL;DR COMPARISON:**
-
-```bash
-# 1. Trước upgrade — measure baseline
-echo "=== BASELINE: [package]@[old-version] ==="
-yarn build 2>&1 | grep -E "dist|vite|bundle" | head -10
-ls -la dist/assets/*.js 2>/dev/null | awk '{print $5, $9}'
-cat package.json | grep '"[package]"' 
-
-# 2. Sau upgrade — compare
-echo "=== AFTER: [package]@[new-version] ==="
-yarn build 2>&1 | grep -E "dist|vite|bundle" | head -10
-ls -la dist/assets/*.js 2>/dev/null | awk '{print $5, $9}'
-cat package.json | grep '"[package]"' 
-
-# 3. So sánh nhanh
-echo "=== COMPARISON ==="
-echo "Bundle Change: [old-size] → [new-size] ([+/-X%])"
-echo "Build Time: [old-time]s → [new-time]s"
-```
-
-**VÍ DỤ OUTPUT TL;DR:**
-
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║  TL;DR: react 18.2.0 → 19.2.5                                      ║
-╠══════════════════════════════════════════════════════════════════════╣
-║  Bundle:    142 KB → 138 KB  (-2.8%) ✅                          ║
-║  Build:     12.3s → 11.8s    (-4%)   ✅                          ║
-║  Security:  0 CVEs → 3 CVEs fixed ✅                             ║
-║  Features:  +12 new hooks, +3 new APIs ✅                         ║
-║  Breaking:  4 APIs removed, 8 changed ⚠️                          ║
-║  Effort:    ~2 hours ⚠️                                           ║
-╠══════════════════════════════════════════════════════════════════════╣
-║  VERDICT: ✅ UPGRADE — Benefits outweigh risks                   ║
-╚══════════════════════════════════════════════════════════════════════╝
-```
-
-═══════════════════════════════════════════════════════════════════════
-COMMIT STRATEGY
-═══════════════════════════════════════════════════════════════════════
-
-Phase 1 Commit:
-   git add -A
-   git commit -m "chore(deps): upgrade [package] 1.x → 2.x
-
-   Breaking changes fixed:
-   - [x] migrated to [y]
-   - [x] removed, use [y] instead
-
-   Verified: build ✅ tests ✅"
-
-Phase 2 Commit:
-   git add -A
-   git commit -m "chore(deps): upgrade [package] 2.x → 3.x
-
-   Breaking changes fixed:
-   - [x] migrated to [y]
-
-   Verified: build ✅ tests ✅"
-```
-
----
-
-### TỔNG HỢP ROADMAP CHO TẤT CẢ PACKAGES:
-
-```markdown
-## 📦 Complete Update Roadmap
-
-### Phase 1 Commands (Execute in order)
-
-| Step | Package | Command | Risk | Time |
-|------|---------|---------|------|------|
-| 1.1 | [pkg-A] | `yarn upgrade pkg-a@^2.x` | 🟢 Low | 15min |
-| 1.2 | [pkg-B] | `yarn upgrade pkg-b@^3.x` | 🟡 Medium | 30min |
-| 1.3 | [pkg-C] | `yarn upgrade pkg-c@^4.x` | 🔴 High | 2h |
-
-### Phase 2 Commands (Execute after Phase 1)
-
-| Step | Package | Command | Risk | Time |
-|------|---------|---------|------|------|
-| 2.1 | [pkg-B] | `yarn upgrade pkg-b@^3.x → ^4.x` | 🔴 High | 1h |
-| 2.2 | [pkg-C] | `yarn upgrade pkg-c@^4.x → ^5.x` | 🔴 High | 2h |
-
-### Execution Summary:
-
-```
-Week 1: P0 Security Updates
-  /qd-update [security-package-1]
-  /qd-update [security-package-2]
-
-Week 2: P1 Major Updates (Low Risk)
-  /qd-update [pkg-A]
-  → Commit after verify
-
-Week 3: P1 Major Updates (Medium Risk)
-  /qd-update [pkg-B]
-  → Phase 1 only, assess before Phase 2
-
-Week 4: P1 Major Updates (High Risk)
-  /qd-update [pkg-C]
-  → Paradigm shift? Consider ABANDON/PROCEED/DEFER
-  → Run /qd-update with --phased flag
-```
-
----
-
-### QUICK REFERENCE: Run Commands
-
-**Parallel Safe (can run together):**
-```bash
-# P0: Security
-yarn upgrade <sec-pkg-1>@latest
-yarn upgrade <sec-pkg-2>@latest
-```
-
-**Sequential Required (wait for previous to verify):**
-```bash
-# Major updates — MUST verify each before next
-yarn upgrade <pkg-A>@^2.x
-# → Verify → Commit
-yarn upgrade <pkg-B>@^3.x
-# → Verify → Commit
-```
-
-**DEFER (add to backlog):**
-```bash
-echo "## DEFERRED: [pkg] [v1] → [v2]
-- Reason: [paradigm shift / effort > value]
-- Review after: [date]
-" >> DEPENDENCY-REPORT.md
-```
-
----
-
-### LINK VỚI /qd-update:
-
-**Từ `/qd-outdated`, sau khi generate roadmap:**
-
-```
-═══════════════════════════════════════════════════════════════════════
-  📋 UPDATE ROADMAP READY
-═══════════════════════════════════════════════════════════════════════
-
-  CHANGELOG saved: CHANGELOG_DEPENDENCY_UPDATE.md
-  ROADMAP saved: UPDATE-ROADMAP.md (tự động tạo)
-
-  ĐỂ BẮT ĐẦU UPDATE:
-  ────────────────────────────────────────────────────────────────────
-
-  P0 (Security — Làm ngay):
-    /qd-update <security-package>
-
-  P1 (Major Updates — Theo roadmap):
-    /qd-update <pkg-A>   # Phase 1 → [1.x] → [2.x]
-    /qd-update <pkg-B>   # Phase 1 → [2.x] → [3.x]
-
-  XEM CHI TIẾT:
-    cat CHANGELOG_DEPENDENCY_UPDATE.md
-    cat UPDATE-ROADMAP.md
-
-═══════════════════════════════════════════════════════════════════════
-```
-
-**Tự động tạo UPDATE-ROADMAP.md:**
-
-```bash
-# Tạo file roadmap chi tiết
-cat > UPDATE-ROADMAP.md << 'EOF'
-# Update Roadmap — Generated $(date)
-
-## Quick Start
-
-```bash
-# Week 1: Security
-/qd-update <security-pkg>
-
-# Week 2: Safe major
-/qd-update <pkg-A>
-
-# Week 3: Medium major
-/qd-update <pkg-B>
-
-# Week 4: High risk major
-/qd-update <pkg-C>
-# → Sẽ có prompt: OPTION A (UNDO) / OPTION B (PROCEED) / OPTION C (DEFER)
-```
-EOF
-```
-
----
-
-## Preventive Tooling Setup
-
-### Renovate Bot
-
-Create `renovate.json`:
-
-```json
-{
-  "extends": ["config:base"],
-  "labels": ["dependencies"],
-  "packageRules": [
-    {
-      "matchUpdateTypes": ["major"],
-      "labels": ["breaking-change"],
-      "automerge": false
-    },
-    {
-      "matchUpdateTypes": ["patch", "minor"],
-      "labels": ["dependencies"]
-    }
-  ]
-}
-```
-
-### CI/CD Security Audit
-
-```yaml
-# .github/workflows/dependency-audit.yml
-name: Dependency Audit
-on: [push, pull_request]
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'yarn'
-      - run: yarn install --frozen-lockfile
-      - name: Security audit
-        run: yarn audit --audit-level=high
-      - name: Check lockfile
-        run: git diff --exit-code yarn.lock
-```
-
----
-
-## Next Steps
-
-1. Review this changelog carefully
-2. Edit migration steps if needed
-3. When ready, trigger `/qd-update <package-name>` for each package
-4. Major updates should be done in a separate branch
-
----
-
-## Rollback Strategy
-
-If any update causes issues:
-
-```bash
-# Undo commit
-git revert HEAD
-
-# Restore lockfile
-git checkout yarn.lock
-yarn install
-
-# Verify rollback
-yarn outdated | grep <package>
-```
-
----
-
-*Generated by /qd-outdated — QuocDuyApp Plugin*
-```
-
----
-
-## Phase 8: Summary + Ask Confirmation
-
-Print console summary:
-
-```
-═══════════════════════════════════════════════════════
-  DEPENDENCY AUDIT COMPLETE — [Project Name]
-═══════════════════════════════════════════════════════
-
-Language: [Node.js / PHP / Python / etc.]
-Package Manager: [yarn / npm / Composer / etc.]
-Total: [N] packages | [X] outdated
-
-🔴 Critical (CVE): N
-🔴 Major (breaking): N
-🟡 Minor: N
-🟢 Patch: N
-✅ Up-to-date: N
-
-───────────────────────────────────────────────────────
-MAJOR UPDATES REQUIRING SEPARATE BRANCH:
-  • [package-1] [1.x] → [2.x] — [brief reason]
-  • [package-2] [1.x] → [2.x] — [brief reason]
-
-───────────────────────────────────────────────────────
-SECURITY UPDATES (< 24h):
-  • [package] CVE-XXXX-XXXX — [description]
-
-═══════════════════════════════════════════════════════
-
-Report saved: CHANGELOG_DEPENDENCY_UPDATE.md
-
-NEXT: Review the changelog, then run:
-  /qd-update <package-name>
-
-Example:
-  /qd-update react
-  /qd-update antd
-  /qd-update vite
-```
-
----
 
 ## Rules
 
-- ✅ **Always** generate CHANGELOG_DEPENDENCY_UPDATE.md — this is the key output
-- ✅ **Always** WebSearch for changelog and breaking changes for MAJOR version jumps
-- ✅ **Always** classify risk (Critical / Major / Minor / Patch)
-- ✅ **Always** ask for user confirmation before any update
-- ✅ **Always** flag codemod availability for major updates
-- ✅ **Always** recommend incremental migration for 2+ major versions behind
-- ✅ **Always** provide rollback strategy
-- ❌ **Never** update in this skill — only audit and report
-- ❌ **Never** skip WebSearch for major version packages
-- ❌ **Never** recommend big bang update for 2+ major versions behind
-
-## Multi-Language Support
-
-This skill works across:
-
-| Language | Command |
-|----------|---------|
-| Node.js | `yarn outdated`, `npm outdated`, `pnpm outdated` |
-| PHP | `composer outdated` |
-| Python | `pip list --outdated`, `poetry show --outdated` |
-| Go | `go list -m -u all` |
-| Rust | `cargo outdated` |
-| Java (Maven) | `mvn versions:display-dependency-updates` |
-| Java (Gradle) | `gradle dependencyUpdates` |
-| C# / .NET | `dotnet list package --outdated` |
-| Ruby | `bundle outdated` |
-| React Native | `yarn outdated`, `npm outdated` |
+- Luon research truoc khi ket luan (search-first).
+- Luon tra docs moi cho major (documentation-lookup).
+- Luon tao changelog + roadmap (writing-plans style).
+- Khong update package trong skill nay.

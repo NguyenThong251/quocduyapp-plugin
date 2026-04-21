@@ -1,7 +1,7 @@
 {
-  "tool_name": "Glob",
-  "tool_input_preview": "{\"pattern\":\"*\",\"path\":\"C:/Users/admin/.claude/projects/D--QuocDuyApp/quocduyapp-plugin/memory\"}",
-  "error": "spawn C:\\Users\\admin\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\vendor\\ripgrep\\x64-win32\\rg.exe ENOENT",
-  "timestamp": "2026-04-18T00:54:54.344Z",
-  "retry_count": 1
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\oh-my-claudecode\\\\agents\\\\AGENTS.md\"}",
+  "error": "File does not exist. Note: your current working directory is C:\\Users\\admin\\.claude\\projects\\D--QuocDuyApp\\quocduyapp-plugin.",
+  "timestamp": "2026-04-21T02:32:51.122Z",
+  "retry_count": 21
 }

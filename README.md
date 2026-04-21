@@ -12,12 +12,13 @@
 
 ## Overview
 
-**quocduyapp-plugin** cung cấp 2 skills chuyên về quản lý dependencies cho Claude Code:
+**quocduyapp-plugin** cung cấp 3 skills chuyên về dependency lifecycle cho Claude Code:
 
 | Skill | Trigger | Mô tả |
 |-------|---------|--------|
 | `/qd-outdated` | "check outdated", "dependency audit" | Audit tất cả thư viện, sinh CHANGELOG để review |
-| `/qd-update` | "update react", "upgrade [package]" | Thực thi update từng thư viện một cách an toàn |
+| `/qd-update` | "update react", "upgrade [package]" | Thực thi update từng thư viện một cách an toàn + verification/reviewer loop |
+| `/qd-debugging` | "debug after update", "fix runtime error" | Debug all-in-one từ log/build/dev/test với root-cause workflow |
 
 ### Điểm khác biệt
 
@@ -26,6 +27,7 @@
 - ✅ **One-by-one** — không bao giờ update nhiều thư viện cùng lúc
 - ✅ **Deep analysis** — phân tích breaking changes, CVE, codemod requirements
 - ✅ **Rollback ready** — luôn có chiến lược rollback rõ ràng
+- ✅ **Debug ready** — có `/qd-debugging` để xử lý lỗi runtime/syntax sau update
 
 ---
 
@@ -41,10 +43,10 @@ Phase 1: Detect project type (9 ngôn ngữ)
 Phase 2: Read dependency manifest
 Phase 3: Identify package manager
 Phase 4: Run outdated command
-Phase 5: WebSearch changelog + breaking changes + CVE
-Phase 6: Analyze risk (Critical / Major / Minor / Patch)
+Phase 5: search-first research + documentation-lookup (Context7)
+Phase 6: Analyze risk + source impact (Critical / Major / Minor / Patch)
 Phase 7: Generate CHANGELOG_DEPENDENCY_UPDATE.md
-Phase 8: Recommend + preventive tooling
+Phase 8: Generate UPDATE-ROADMAP.md (writing-plans style)
 ```
 
 **Output:**
@@ -71,10 +73,10 @@ Phase 1: Audit — đọc CHANGELOG, xác nhận package + version
 Phase 2: Classify — confirm risk level
 Phase 3: Prepare Baseline — snapshot, test, dedicated branch
 Phase 4: Update ONE library
-Phase 5: Verify — build, test, bundle size
-Phase 6: Major Strategy — codemod / incremental migration
-Phase 7: Preventive Tool — config Renovate Bot, CI
-Phase 8: Deploy — commit + PR
+Phase 5: Verification-loop — build, typecheck, lint, test, runtime check
+Phase 6: Build-error-resolver loop (if compile/build fail)
+Phase 7: Handoff qd-debugging (if runtime/dev syntax fail)
+Phase 8: Reviewer pass (typescript/python/go + requesting-code-review)
 ```
 
 **Confirmation workflow:**
@@ -84,6 +86,20 @@ Phase 8: Deploy — commit + PR
 /qd-update → [Per-library confirmation before each update]
      ↓
 [Build → Test → Verify → Commit]
+```
+
+### `/qd-debugging`
+
+Debug all-in-one cho mọi lỗi, không chỉ lỗi sau update.
+
+**Workflow:**
+```
+Phase 1: Intake issue/log file
+Phase 2: Evidence collection (stack trace, build/test/dev logs)
+Phase 3: Systematic root-cause analysis
+Phase 4: Minimal fix + verification-before-completion
+Phase 5: Optional TDD regression test
+Phase 6: Final debug report + next action
 ```
 
 **Trigger keywords:**

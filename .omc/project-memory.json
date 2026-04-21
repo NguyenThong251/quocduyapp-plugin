@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1776417636971,
+  "lastScanned": 1776734562320,
   "projectRoot": "C:\\Users\\admin\\.claude\\projects\\D--QuocDuyApp\\quocduyapp-plugin",
   "techStack": {
     "languages": [
@@ -47,21 +47,32 @@
       "path": "agents",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1776417636932,
+      "lastAccessed": 1776734562280,
       "keyFiles": []
     },
     "hooks": {
       "path": "hooks",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1776417636936,
+      "lastAccessed": 1776734562281,
       "keyFiles": []
+    },
+    "memory": {
+      "path": "memory",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1776734562300,
+      "keyFiles": [
+        "feedback_workflow.md",
+        "MEMORY.md",
+        "user_quocduyapp_plugin_workflow.md"
+      ]
     },
     "rules": {
       "path": "rules",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1776417636944,
+      "lastAccessed": 1776734562300,
       "keyFiles": [
         "qd-conventions.md"
       ]
@@ -70,53 +81,29 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 0,
-      "lastAccessed": 1776417636945,
+      "lastAccessed": 1776734562301,
       "keyFiles": []
     },
     "skills": {
       "path": "skills",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1776417636946,
+      "lastAccessed": 1776734562301,
       "keyFiles": []
     },
     "templates": {
       "path": "templates",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1776417636947,
+      "lastAccessed": 1776734562302,
       "keyFiles": []
     }
   },
   "hotPaths": [
     {
       "path": "skills\\qd-update\\SKILL.md",
-      "accessCount": 9,
-      "lastAccessed": 1776418416429,
-      "type": "file"
-    },
-    {
-      "path": "skills\\qd-outdated\\SKILL.md",
       "accessCount": 6,
-      "lastAccessed": 1776474528412,
-      "type": "file"
-    },
-    {
-      "path": "",
-      "accessCount": 1,
-      "lastAccessed": 1776417779622,
-      "type": "directory"
-    },
-    {
-      "path": "memory\\user_quocduyapp_plugin_workflow.md",
-      "accessCount": 1,
-      "lastAccessed": 1776473631185,
-      "type": "file"
-    },
-    {
-      "path": "memory\\MEMORY.md",
-      "accessCount": 1,
-      "lastAccessed": 1776473714635,
+      "lastAccessed": 1776735003848,
       "type": "file"
     }
   ],
