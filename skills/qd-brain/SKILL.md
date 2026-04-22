@@ -1,6 +1,6 @@
 ---
 name: qd-brain
-description: Second brain for Claude Code — persistent context, session memory, learned rules, project documentation. Preserves project understanding across sessions and machines.
+description: Second brain for Claude Code — persistent context, session memory, project documentation, AGENTS.md generation, learned rules. Preserves project understanding across sessions and machines.
 triggers:
   - /qd-brain
   - save context
@@ -8,11 +8,13 @@ triggers:
   - learn rules
   - project memory
   - session memory
+  - create AGENTS.md
+  - generate project docs
 ---
 
 # /qd-brain
 
-**Second Brain.** Persistent context + memory system for Claude Code. Learns project structure, rules, and saves session state so you can continue from anywhere.
+**Second Brain.** Persistent context + memory + documentation system for Claude Code. Learns project structure, generates AGENTS.md, saves session state, and preserves context across sessions and machines.
 
 ---
 
@@ -40,9 +42,23 @@ triggers:
 │   └── states/             # Agent state files
 └── memory/                  # Persistent memory
     ├── project.md          # Project overview
-    ├── structure.md        # Directory structure
+    ├── structure.md        # Directory structure (from AGENTS.md)
     └── features.md         # Feature tracking
 ```
+
+---
+
+## Commands
+
+| Command | Action |
+|---------|--------|
+| `/qd-brain init` | Initialize brain structure |
+| `/qd-brain learn` | Learn project structure, rules, patterns |
+| `/qd-brain save` | Save current session |
+| `/qd-brain load` | Load session context |
+| `/qd-brain plan <name>` | Create new plan |
+| `/qd-brain status` | Show brain status |
+| `/qd-brain docs` | Generate/update AGENTS.md files |
 
 ---
 
@@ -132,12 +148,217 @@ git checkout <file>
 - Handle errors explicitly
 
 ## Project-Specific
-{Learned from /qd-deepinit and code analysis}
+{Learned from code analysis - see .doc/memory/structure.md}
 ```
 
 ---
 
-## Step 2 — Session Management
+## Step 2 — Learn Project Structure (Auto-learn)
+
+Run this after init or when starting on new project.
+
+### Map Directory Structure
+
+Use Explore agent or glob to list all directories:
+
+```bash
+find . -type d ! -path '*/node_modules/*' ! -path '*/.git/*' ! -path '*/dist/*' ! -path '*/build/*' ! -path '*/__pycache__/*' ! -path '*/.venv/*' ! -path '*/coverage/*' ! -path '*/.next/*' ! -path '*/.nuxt/*' ! -path '*/.doc/*' | sort
+```
+
+### Analyze Each Directory
+
+For each directory, read key files to understand:
+- What the directory contains
+- How components relate
+- Special instructions needed
+- Dependencies
+
+### Generate Structure Doc
+
+`.doc/memory/structure.md`:
+```markdown
+# Project Structure
+
+## Directory Tree
+```
+{output from find command}
+```
+
+## Key Directories
+| Directory | Purpose |
+|-----------|---------|
+| `src/` | {purpose} |
+| `src/components/` | {purpose} |
+
+## Learned Patterns
+{Learned from analyzing existing code}
+```
+
+---
+
+## Step 3 — Generate AGENTS.md Files
+
+**Core Concept:** AGENTS.md files serve as **AI-readable documentation** that helps agents understand the codebase.
+
+### Hierarchical Tagging System
+
+Every AGENTS.md (except root) includes a parent reference tag:
+
+```markdown
+<!-- Parent: ../AGENTS.md -->
+```
+
+Creates a navigable hierarchy:
+```
+/AGENTS.md                          ← Root (no parent tag)
+├── src/AGENTS.md                   ← <!-- Parent: ../AGENTS.md -->
+│   ├── src/components/AGENTS.md   ← <!-- Parent: ../AGENTS.md -->
+│   └── src/utils/AGENTS.md       ← <!-- Parent: ../AGENTS.md -->
+└── docs/AGENTS.md                 ← <!-- Parent: ../AGENTS.md -->
+```
+
+### AGENTS.md Template
+
+```markdown
+<!-- Parent: {relative_path_to_parent}/AGENTS.md -->
+<!-- Generated: {timestamp} | Updated: {timestamp} -->
+
+# {Directory Name}
+
+## Purpose
+{One-paragraph description of what this directory contains and its role}
+
+## Key Files
+{List each significant file with a one-line description}
+
+| File | Description |
+|------|-------------|
+| `file.ts` | Brief description of purpose |
+
+## Subdirectories
+{List each subdirectory with brief purpose}
+
+| Directory | Purpose |
+|-----------|---------|
+| `subdir/` | What it contains (see `subdir/AGENTS.md`) |
+
+## For AI Agents
+
+### Working In This Directory
+{Special instructions for AI agents modifying files here}
+
+### Testing Requirements
+{How to test changes in this directory}
+
+### Common Patterns
+{Code patterns or conventions used here}
+
+## Dependencies
+
+### Internal
+{References to other parts of the codebase this depends on}
+
+### External
+{Key external packages/libraries used}
+
+<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
+```
+
+### AGENTS.md Generation Workflow
+
+1. **Map directories** (Step 2 above)
+2. **Organize by depth level**:
+   ```
+   Level 0: / (root)
+   Level 1: /src, /docs, /tests
+   Level 2: /src/components, /src/utils
+   ...
+   ```
+3. **Generate parent levels first** (ensures parent references are valid)
+4. **For each directory:**
+   - Read key files
+   - Analyze purpose and relationships
+   - Generate AGENTS.md content
+   - Write with proper parent reference
+
+### Update Mode (if AGENTS.md exists)
+
+When AGENTS.md already exists:
+
+1. **Read existing content**
+2. **Identify sections:**
+   - Auto-generated sections (can be updated)
+   - Manual sections (`<!-- MANUAL -->` preserved)
+3. **Compare:**
+   - New files added?
+   - Files removed?
+   - Structure changed?
+4. **Merge:**
+   - Update auto-generated content
+   - Preserve manual annotations
+   - Update timestamp
+
+### Validate Hierarchy
+
+After generation, verify:
+
+| Check | How to Verify | Corrective Action |
+|-------|--------------|-------------------|
+| Parent references resolve | Read each AGENTS.md, check `<!-- Parent: -->` path exists | Fix path or remove orphan |
+| No orphaned AGENTS.md | Compare locations to directory structure | Delete orphaned files |
+| Completeness | List directories, check for AGENTS.md | Generate missing files |
+
+### Empty Directory Handling
+
+| Condition | Action |
+|-----------|--------|
+| No files, no subdirectories | **Skip** - do not create AGENTS.md |
+| No files, has subdirectories | Create minimal AGENTS.md with subdirectory listing only |
+| Has only generated files (*.min.js, *.map) | Skip or minimal AGENTS.md |
+| Has only config files | Create AGENTS.md describing configuration purpose |
+
+### Parallelization
+
+1. **Same-level directories**: Process in parallel
+2. **Different levels**: Sequential (parent first)
+3. **Large directories**: Spawn dedicated agent per directory
+4. **Small directories**: Batch multiple into one agent
+
+---
+
+## Step 4 — Learn Rules from Code
+
+### From Git History
+
+```bash
+git log --oneline -20
+git diff HEAD~5 --name-only
+```
+
+Extract:
+- Commit message style
+- File change patterns
+- Branch naming conventions
+
+### From Code Analysis
+
+Analyze existing code to learn:
+- Naming conventions (file names, function names)
+- Code organization (folder structure)
+- Patterns used (observers, handlers, etc.)
+- Error handling style
+- Documentation style
+
+### Update Rule Files
+
+After learning, update:
+- `.doc/rule/style.md` - code style patterns
+- `.doc/rule/naming.md` - naming conventions
+- `.doc/rule/git.md` - git workflow (if different)
+
+---
+
+## Step 5 — Session Management
 
 ### On Session Start
 
@@ -145,6 +366,7 @@ git checkout <file>
 2. Read `.doc/session/active/current.md` (if exists)
 3. Read recent session archives to understand context
 4. Read active plans from `.doc/plan/drafts/`
+5. Ask: "Continuing from previous session. Last work was on {feature}. Continue?"
 
 ### During Session
 
@@ -186,7 +408,7 @@ git checkout <file>
 
 ---
 
-## Step 3 — Plan Management
+## Step 6 — Plan Management
 
 ### Creating a Plan
 
@@ -261,50 +483,7 @@ Verification:
 
 ---
 
-## Step 4 — Rule Learning
-
-### From Git History
-
-Analyze recent commits to learn patterns:
-
-```bash
-git log --oneline -20
-git diff HEAD~5 --name-only
-```
-
-Extract:
-- Commit message style
-- File change patterns
-- Branch naming conventions
-
-### From Code Analysis
-
-Analyze existing code to learn:
-
-- Naming conventions (check file names, function names)
-- Code organization (folder structure)
-- Patterns used (observers, handlers, etc.)
-- Error handling style
-- Documentation style
-
-### From /qd-deepinit
-
-If AGENTS.md exists:
-- Read all AGENTS.md files
-- Extract directory purposes
-- Learn AI agent instructions
-
-### Rule Categories to Learn
-
-1. **Git Rules**: Workflow, commit style, branch names
-2. **Code Style**: Naming, formatting, best practices
-3. **Debug Rules**: Common issues, fix patterns
-4. **Naming Rules**: File naming, variable naming
-5. **Refactor Rules**: When to refactor, patterns to follow
-
----
-
-## Step 5 — Context Preservation
+## Step 7 — Context Preservation
 
 ### Cross-Session Continuity
 
@@ -313,7 +492,7 @@ When continuing work after break:
 1. Read `.doc/memory/project.md`
 2. Read `.doc/session/archive/by-feature/{feature}.md`
 3. Check `.doc/plan/approved/` for active plans
-4. Ask user: "Continuing from previous session. Last work was on {feature}. Continue?"
+4. Ask user to confirm and continue
 
 ### Cross-Machine Continuity
 
@@ -326,37 +505,7 @@ When opening project on different machine:
 
 ---
 
-## Step 6 — Learn from /qd-deepinit
-
-### Read Existing AGENTS.md
-
-If project has AGENTS.md files:
-
-1. Read root `AGENTS.md`
-2. Read relevant subdirectory AGENTS.md
-3. Extract directory purposes into `.doc/memory/structure.md`
-
-### Generate Structure Doc
-
-`.doc/memory/structure.md`:
-```markdown
-# Project Structure
-
-## Root
-- `src/`: {purpose}
-- `docs/`: {purpose}
-- `tests/`: {purpose}
-
-## Key Directories
-| Directory | Purpose | AGENTS |
-|---------|---------|--------|
-| `src/` | Source code | See `src/AGENTS.md` |
-| `src/components/` | React components | See `src/components/AGENTS.md` |
-```
-
----
-
-## Step 7 — Auto-Save During Session
+## Step 8 — Auto-Save During Session
 
 ### Save Points
 
@@ -367,27 +516,15 @@ After each significant action:
 3. **Decision made** → Save to decisions log
 4. **Rule discovered** → Save to appropriate rule file
 
-### Quick Save Command
+### Quick Save Commands
 
 ```
-// In conversation
 "Save this" → Summarize + save to active session
 
 "Remember rule: {rule}" → Save to .doc/rule/custom/
 
 "Update plan: {changes}" → Update draft plan
 ```
-
----
-
-## Step 8 — Initialize from /qd-deepinit
-
-Run `/qd-deepinit` first, then:
-
-1. Read all generated AGENTS.md files
-2. Convert to `.doc/memory/structure.md`
-3. Extract AI agent instructions to `.doc/rule/custom/`
-4. Create project overview in `.doc/memory/project.md`
 
 ---
 
@@ -401,7 +538,28 @@ Claude: Initializing project brain...
 - Creating memory files
 - Creating git rules
 - Creating style rules
-Done. Run /qd-deepinit to learn project structure.
+Done. Run /qd-brain learn to analyze project structure.
+```
+
+### Learn Project
+```
+User: /qd-brain learn
+Claude: Learning project structure...
+- Mapping directories
+- Analyzing code patterns
+- Extracting conventions
+- Generating AGENTS.md files
+Done. Project brain initialized.
+```
+
+### Generate Documentation
+```
+User: /qd-brain docs
+Claude: Generating AGENTS.md files...
+- Creating root AGENTS.md
+- Creating src/AGENTS.md
+- Creating src/components/AGENTS.md
+Done. Documentation generated.
 ```
 
 ### Save Session
@@ -426,22 +584,9 @@ Ready to continue.
 
 ### Learn New Rule
 ```
-User: remember: always validate input at system boundaries
+User: remember rule: always validate input at system boundaries
 Claude: Saved to .doc/rule/custom/validation.md
 ```
-
----
-
-## Commands
-
-| Command | Action |
-|---------|--------|
-| `/qd-brain init` | Initialize brain structure |
-| `/qd-brain save` | Save current session |
-| `/qd-brain load` | Load session context |
-| `/qd-brain learn` | Learn rules from code/git |
-| `/qd-brain plan <name>` | Create new plan |
-| `/qd-brain status` | Show brain status |
 
 ---
 
@@ -465,4 +610,4 @@ Keep in git:
 
 ## Source
 
-Combines patterns from `/qd-deepinit` and session management best practices.
+Combines hierarchical documentation (AGENTS.md), session memory, plan management, and rule learning into a unified second brain system.
