@@ -1,6 +1,6 @@
 ---
 name: qd-brain
-description: Second brain for Claude Code — persistent context, session memory, project documentation, AGENTS.md generation, learned rules. Preserves project understanding across sessions and machines.
+description: Second brain for Claude Code — persistent context, session memory, project documentation, AGENTS.md generation, learned rules, git history analysis. Preserves project understanding across sessions and machines.
 triggers:
   - /qd-brain
   - save context
@@ -10,40 +10,46 @@ triggers:
   - session memory
   - create AGENTS.md
   - generate project docs
+  - analyze patterns
 ---
 
 # /qd-brain
 
-**Second Brain.** Persistent context + memory + documentation system for Claude Code. Learns project structure, generates AGENTS.md, saves session state, and preserves context across sessions and machines.
+**Second Brain.** Persistent context + memory + documentation + pattern analysis system for Claude Code. Learns project structure, analyzes git history, generates AGENTS.md, saves session state, and preserves context across sessions and machines.
 
 ---
 
 ## Folder Structure
 
 ```
-.doc/                          # Project brain (gitignored, local only)
-├── session/                   # Session memories
-│   ├── active/               # Current session context
-│   │   └── current.md       # What's being worked on now
-│   └── archive/             # Past session summaries
-│       ├── YYYY-MM-DD/      # By date
-│       └── by-feature/      # Organized by feature
-├── plan/                     # Feature plans
+.doc/                          # Project brain
+├── CLAUDE.md                 # Root brain file (read on startup)
+├── session/
+│   ├── current.md            # Live session tracking
+│   ├── handoff.md           # Handoff notes for next session
+│   └── history/             # Past session archives
+│       └── YYYY-MM-DD_HH-MM.md
+├── plan/
 │   ├── drafts/              # In-progress plans
 │   ├── approved/            # Confirmed plans
-│   └── history/             # Completed plans
-├── rule/                     # Learned rules
+│   └── completed/           # Completed plans
+├── rules/
 │   ├── git.md              # Git workflow rules
-│   ├── style.md            # Code style rules
 │   ├── naming.md           # Naming conventions
-│   ├── debug.md            # Debug patterns
+│   ├── code-style.md       # Code style rules
 │   └── custom/             # Project-specific rules
-├── agent/                   # Agent configurations
-│   └── states/             # Agent state files
-└── memory/                  # Persistent memory
-    ├── project.md          # Project overview
-    ├── structure.md        # Directory structure (from AGENTS.md)
-    └── features.md         # Feature tracking
+├── knowledge/
+│   ├── architecture.md     # System architecture
+│   ├── features/           # Feature documentation
+│   │   └── <feature>.md
+│   └── issues/             # Known issues
+│       └── <id>.md
+├── init/
+│   └── project-snapshot.md # Project package/dependency snapshot
+└── scripts/
+    ├── setup-brain.sh       # Verify .doc/ structure
+    ├── save-session.sh       # Quick save to current session
+    └── archive-session.sh    # Archive session + reset
 ```
 
 ---
@@ -53,12 +59,14 @@ triggers:
 | Command | Action |
 |---------|--------|
 | `/qd-brain init` | Initialize brain structure |
-| `/qd-brain learn` | Learn project structure, rules, patterns |
-| `/qd-brain save` | Save current session |
+| `/qd-brain learn` | Learn project structure + analyze git history |
+| `/qd-brain analyze` | Analyze git history for patterns |
+| `/qd-brain docs` | Generate/update AGENTS.md files |
+| `/qd-brain save` | Save current session (quick) |
 | `/qd-brain load` | Load session context |
 | `/qd-brain plan <name>` | Create new plan |
 | `/qd-brain status` | Show brain status |
-| `/qd-brain docs` | Generate/update AGENTS.md files |
+| `/qd-brain handoff` | Create handoff notes |
 
 ---
 
@@ -67,60 +75,75 @@ triggers:
 ### Create Directory Structure
 
 ```bash
-mkdir -p .doc/{session/{active,archive/{YYYY-MM-DD,by-feature}},plan/{drafts,approved,history},rule/custom,agent/states,memory}
+mkdir -p .doc/{session/history,plan/{drafts,approved,completed},rules/custom,knowledge/{features,issues},init,scripts}
 ```
 
-### Create Root Memory File
+### Run Setup Script
 
-`.doc/memory/project.md`:
+```bash
+# Verify/create .doc/ structure
+./.doc/scripts/setup-brain.sh
+```
+
+### Create Root Brain File
+
+`.doc/CLAUDE.md`:
 ```markdown
 # Project Brain
 
-## Overview
-- **Project**: {project name}
-- **Created**: {date}
-- **Last Updated**: {date}
-- **Tech Stack**: {list}
+**Last Updated**: {date}
 
-## Current Focus
-- {what's being worked on}
+## Quick Start
+1. Read `session/current.md` — current session context
+2. Read `session/handoff.md` — if continuing previous work
+3. Read `rules/` — project conventions
 
-## Key Context
-- {important project-specific info}
+## Current Work
+{one-line summary of what's being done}
+
+## Active Plans
+See `plan/drafts/` and `plan/approved/`
 
 ## Session History
-See `session/archive/` for past sessions.
+See `session/history/`
 ```
 
-### Create Git Rules
+### Create Git Rules (from default-rules.md)
 
-`.doc/rule/git.md`:
+`.doc/rules/git.md`:
 ```markdown
 # Git Rules
 
-## Before Push
-- [ ] All changes reviewed
-- [ ] Tests pass locally
-- [ ] No secrets committed
-- [ ] Commit message follows convention
+## ⚠️ QUAN TRỌNG NHẤT
 
-## Push Protocol
-- **NEVER push without user confirmation** on sensitive branches
-- Main/dev branches require explicit approval
-- Feature branches can push freely
+**KHÔNG BAO GIỜ tự ý git push** — dù là push lên branch của mình.
+Luôn phải hỏi và được xác nhận từ người điều khiển trước.
 
 ## Commit Convention
-```
-<type>: <description>
 
-<optional body>
-```
-Types: feat, fix, refactor, docs, test, chore, perf, ci
+Format: `type(scope): mô tả ngắn gọn`
+
+Types:
+- `feat`: tính năng mới
+- `fix`: sửa bug
+- `refactor`: cải thiện code không thêm feature/fix bug
+- `docs`: chỉ thay đổi tài liệu
+- `test`: thêm/sửa test
+- `chore`: build system, dependencies
+- `hotfix`: fix khẩn cấp trên production
 
 ## Branch Naming
-- Feature: `feature/<name>`
-- Bugfix: `fix/<issue>`
-- Update: `update/<package>-<from>-to-<to>`
+- Feature: `feature/<tên-ngắn-gọn>`
+- Bug fix: `fix/<issue-id-hoặc-mô-tả>`
+- Hotfix: `hotfix/<mô-tả>`
+- Release: `release/<version>`
+
+## Hotfix Process
+1. Tạo branch `hotfix/<mô-tả>`
+2. Fix + test
+3. Commit với prefix `hotfix:`
+4. Báo cáo người điều khiển để confirm push
+5. Merge sau khi được phép
 
 ## Rollback Protocol
 ```bash
@@ -129,37 +152,115 @@ git checkout <file>
 ```
 ```
 
-### Create Style Rules
+### Create Session Files
 
-`.doc/rule/style.md`:
+`.doc/session/current.md`:
 ```markdown
-# Code Style Rules
+# Session — {YYYY-MM-DD HH:MM}
 
-## Naming Conventions
-- Variables/functions: camelCase
-- Components/Classes: PascalCase
-- Constants: UPPER_SNAKE_CASE
-- Files: kebab-case or camelCase (per project)
+## Mục tiêu session này
 
-## Best Practices
-- Keep functions < 50 lines
-- Keep files < 800 lines
-- Use meaningful names
-- Handle errors explicitly
+{mục tiêu}
 
-## Project-Specific
-{Learned from code analysis - see .doc/memory/structure.md}
+## Đã làm
+
+- {HH:MM} {action}
+
+## Quyết định quan trọng
+
+- {decision}: {lý do}
+
+## Issues phát hiện
+
+- {issue}: {status}
+
+## Rules mới
+
+- {rule}: {context}
+
+## TODO cuối session
+
+- [ ] {item}
+```
+
+`.doc/session/handoff.md`:
+```markdown
+# Handoff Notes
+
+**Last Updated**: {date}
+
+## Đang làm gì
+{one-line summary}
+
+## Còn dang dở
+- {item}
+
+## Bước tiếp theo
+1. {step}
+
+## Cần lưu ý
+- {note}
+
+## Risk/Blocker
+- {risk}
 ```
 
 ---
 
-## Step 2 — Learn Project Structure (Auto-learn)
+## Step 2 — Analyze Git History (Extract Patterns)
 
-Run this after init or when starting on new project.
+Use `/qd-brain analyze` to learn project conventions from git history.
+
+### Gather Git Data
+
+```bash
+# Get recent commits with file changes
+git log --oneline -n ${COMMITS:-200} --name-only --pretty=format:"%H|%s|%ad" --date=short
+
+# Get commit frequency by file
+git log --oneline -n 200 --name-only | grep -v "^$" | grep -v "^[a-f0-9]" | sort | uniq -c | sort -rn | head -20
+
+# Get commit message patterns
+git log --oneline -n 200 | cut -d' ' -f2- | head -50
+```
+
+### Detect Pattern Types
+
+| Pattern | Detection Method |
+|---------|-----------------|
+| **Commit conventions** | Regex on commit messages (feat:, fix:, chore:) |
+| **File co-changes** | Files that always change together |
+| **Workflow sequences** | Repeated file change patterns |
+| **Architecture** | Folder structure and naming conventions |
+| **Testing patterns** | Test file locations, naming, coverage |
+
+### Extract Patterns
+
+#### Commit Convention Detection
+- Check if commits follow `type(scope): description`
+- Extract common types used
+- Identify scope patterns
+
+#### File Co-change Detection
+- Files that always appear together in commits
+- Common change pairs (e.g., Component + its test)
+
+#### Workflow Sequence Detection
+- Repeated patterns of file changes
+- Build → Test → Deploy workflows
+
+### Update Rule Files
+
+After analysis, update:
+- `.doc/rules/git.md` — commit conventions
+- `.doc/rules/naming.md` — file naming patterns
+- `.doc/rules/code-style.md` — code patterns
+
+---
+
+## Step 3 — Learn Project Structure
 
 ### Map Directory Structure
-
-Use Explore agent or glob to list all directories:
 
 ```bash
 find . -type d ! -path '*/node_modules/*' ! -path '*/.git/*' ! -path '*/dist/*' ! -path '*/build/*' ! -path '*/__pycache__/*' ! -path '*/.venv/*' ! -path '*/coverage/*' ! -path '*/.next/*' ! -path '*/.nuxt/*' ! -path '*/.doc/*' | sort
@@ -167,54 +268,86 @@ find . -type d ! -path '*/node_modules/*' ! -path '*/.git/*' ! -path '*/dist/*' 
 
 ### Analyze Each Directory
 
-For each directory, read key files to understand:
-- What the directory contains
-- How components relate
-- Special instructions needed
-- Dependencies
+For each directory:
+1. Read key files to understand purpose
+2. Identify relationships with other directories
+3. Note special instructions for AI agents
+4. Document dependencies
 
-### Generate Structure Doc
+### Generate Architecture Doc
 
-`.doc/memory/structure.md`:
+`.doc/knowledge/architecture.md`:
 ```markdown
-# Project Structure
+# Architecture — {Project Name}
 
-## Directory Tree
+**Last updated**: {date}
+
+## Overview
+{mô tả tổng quan hệ thống}
+
+## Cấu trúc thư mục
 ```
-{output from find command}
+{tree output}
 ```
 
-## Key Directories
-| Directory | Purpose |
-|-----------|---------|
-| `src/` | {purpose} |
-| `src/components/` | {purpose} |
+## Data Flow
+{mô tả data đi qua hệ thống như thế nào}
 
-## Learned Patterns
-{Learned from analyzing existing code}
+## Entry Points
+- `<file>`: <mục đích>
+
+## Module chính
+| Module | Vị trí | Chức năng |
+|--------|---------|-----------|
+| {name} | {path}  | {purpose} |
+
+## Patterns đang dùng
+- {pattern}: {mô tả}
+
+## Known constraints
+- {constraint}: {lý do}
+```
+
+### Generate Project Snapshot
+
+`.doc/init/project-snapshot.md`:
+```markdown
+# Project Snapshot — {date}
+
+## Package info
+{tên, version, author từ package.json/Cargo.toml/pyproject.toml}
+
+## Dependencies chính
+| Package | Version | Mục đích |
+| ------- | ------- | -------- |
+| {name}  | {ver}   | {why}    |
+
+## Scripts
+| Script | Lệnh  | Mục đích |
+| ------ | ----- | -------- |
+| {name} | {cmd} | {why}    |
+
+## Environment variables cần thiết
+- `<VAR_NAME>`: {mô tả}
+
+## Cách chạy local
+```bash
+{commands}
+```
+
+## Cách deploy
+{steps}
 ```
 
 ---
 
-## Step 3 — Generate AGENTS.md Files
-
-**Core Concept:** AGENTS.md files serve as **AI-readable documentation** that helps agents understand the codebase.
+## Step 4 — Generate AGENTS.md Files
 
 ### Hierarchical Tagging System
 
 Every AGENTS.md (except root) includes a parent reference tag:
-
 ```markdown
 <!-- Parent: ../AGENTS.md -->
-```
-
-Creates a navigable hierarchy:
-```
-/AGENTS.md                          ← Root (no parent tag)
-├── src/AGENTS.md                   ← <!-- Parent: ../AGENTS.md -->
-│   ├── src/components/AGENTS.md   ← <!-- Parent: ../AGENTS.md -->
-│   └── src/utils/AGENTS.md       ← <!-- Parent: ../AGENTS.md -->
-└── docs/AGENTS.md                 ← <!-- Parent: ../AGENTS.md -->
 ```
 
 ### AGENTS.md Template
@@ -226,197 +359,134 @@ Creates a navigable hierarchy:
 # {Directory Name}
 
 ## Purpose
-{One-paragraph description of what this directory contains and its role}
+{One-paragraph description}
 
 ## Key Files
-{List each significant file with a one-line description}
-
 | File | Description |
 |------|-------------|
-| `file.ts` | Brief description of purpose |
+| `file.ts` | Brief description |
 
 ## Subdirectories
-{List each subdirectory with brief purpose}
-
 | Directory | Purpose |
 |-----------|---------|
 | `subdir/` | What it contains (see `subdir/AGENTS.md`) |
 
 ## For AI Agents
-
-### Working In This Directory
-{Special instructions for AI agents modifying files here}
+{Special instructions for AI agents}
 
 ### Testing Requirements
-{How to test changes in this directory}
+{How to test changes here}
 
 ### Common Patterns
-{Code patterns or conventions used here}
+{Code patterns used here}
 
 ## Dependencies
+### Internal: {references}
+### External: {packages}
 
-### Internal
-{References to other parts of the codebase this depends on}
-
-### External
-{Key external packages/libraries used}
-
-<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
+<!-- MANUAL: preserved on regeneration -->
 ```
 
-### AGENTS.md Generation Workflow
+### Generation Workflow
 
-1. **Map directories** (Step 2 above)
-2. **Organize by depth level**:
-   ```
-   Level 0: / (root)
-   Level 1: /src, /docs, /tests
-   Level 2: /src/components, /src/utils
-   ...
-   ```
-3. **Generate parent levels first** (ensures parent references are valid)
-4. **For each directory:**
-   - Read key files
-   - Analyze purpose and relationships
-   - Generate AGENTS.md content
-   - Write with proper parent reference
+1. Map directories by depth level
+2. Generate parent levels first
+3. For each directory: read → analyze → generate → write
+4. Validate parent references
 
-### Update Mode (if AGENTS.md exists)
+### Update Mode (if exists)
 
-When AGENTS.md already exists:
-
-1. **Read existing content**
-2. **Identify sections:**
-   - Auto-generated sections (can be updated)
-   - Manual sections (`<!-- MANUAL -->` preserved)
-3. **Compare:**
-   - New files added?
-   - Files removed?
-   - Structure changed?
-4. **Merge:**
-   - Update auto-generated content
-   - Preserve manual annotations
-   - Update timestamp
-
-### Validate Hierarchy
-
-After generation, verify:
-
-| Check | How to Verify | Corrective Action |
-|-------|--------------|-------------------|
-| Parent references resolve | Read each AGENTS.md, check `<!-- Parent: -->` path exists | Fix path or remove orphan |
-| No orphaned AGENTS.md | Compare locations to directory structure | Delete orphaned files |
-| Completeness | List directories, check for AGENTS.md | Generate missing files |
-
-### Empty Directory Handling
-
-| Condition | Action |
-|-----------|--------|
-| No files, no subdirectories | **Skip** - do not create AGENTS.md |
-| No files, has subdirectories | Create minimal AGENTS.md with subdirectory listing only |
-| Has only generated files (*.min.js, *.map) | Skip or minimal AGENTS.md |
-| Has only config files | Create AGENTS.md describing configuration purpose |
-
-### Parallelization
-
-1. **Same-level directories**: Process in parallel
-2. **Different levels**: Sequential (parent first)
-3. **Large directories**: Spawn dedicated agent per directory
-4. **Small directories**: Batch multiple into one agent
-
----
-
-## Step 4 — Learn Rules from Code
-
-### From Git History
-
-```bash
-git log --oneline -20
-git diff HEAD~5 --name-only
-```
-
-Extract:
-- Commit message style
-- File change patterns
-- Branch naming conventions
-
-### From Code Analysis
-
-Analyze existing code to learn:
-- Naming conventions (file names, function names)
-- Code organization (folder structure)
-- Patterns used (observers, handlers, etc.)
-- Error handling style
-- Documentation style
-
-### Update Rule Files
-
-After learning, update:
-- `.doc/rule/style.md` - code style patterns
-- `.doc/rule/naming.md` - naming conventions
-- `.doc/rule/git.md` - git workflow (if different)
+1. Read existing content
+2. Preserve `<!-- MANUAL -->` sections
+3. Update auto-generated sections
+4. Update timestamp
 
 ---
 
 ## Step 5 — Session Management
 
-### On Session Start
+### Session Format (from session-format.md)
 
-1. Read `.doc/memory/project.md`
-2. Read `.doc/session/active/current.md` (if exists)
-3. Read recent session archives to understand context
-4. Read active plans from `.doc/plan/drafts/`
-5. Ask: "Continuing from previous session. Last work was on {feature}. Continue?"
+**Compact first** — agent mới đọc trong < 2 phút hiểu được context.
 
-### During Session
+**Lưu WHAT và WHY, không lưu HOW chi tiết:**
+- ✅ "Dùng Redis cho session vì latency thấp hơn"
+- ❌ "Cài redis bằng npm install ioredis..."
 
-**Auto-save triggers:**
-- After implementing a feature
-- After fixing a bug
-- After making significant decisions
-- Before ending session
+### Archive Format
 
-**Save to session active:**
+`.doc/session/history/YYYY-MM-DD_HH-MM.md`:
 ```markdown
-# Session: {date} {time}
+# Session {YYYY-MM-DD HH:MM} → {HH:MM}
 
-## Tasks Completed
-- {task 1}
-- {task 2}
+**Focus**: {một dòng mô tả}
+
+## Accomplished
+- {item}
 
 ## Decisions Made
-- {decision 1}
-- {decision 2}
+| Quyết định | Lý do | Alternatives đã loại |
+| ---------- | ----- | -------------------- |
+| {decision} | {why} | {rejected options}   |
 
 ## Issues Found
-- {issue 1}
-- {issue 2}
+| Issue | Severity | Status |
+| ----- | -------- | ------ |
+| {issue} | HIGH | RESOLVED |
 
-## Next Steps
-- {next action}
+## New Rules/Patterns
+- {rule}: {context}
 
-## Code Changes
-- `file.ts`: {what changed}
+## Files Changed
+- `<path>`: {thay đổi}
+
+## Blockers / Open Questions
+- {item}
+
+## Summary
+{tóm tắt ngắn nhất}
 ```
+
+### Handoff Quality Checklist
+
+A good handoff answers:
+- [ ] Agent mới đang ở bước nào?
+- [ ] Việc gì đang còn dang dở?
+- [ ] Có risk hoặc blocker nào không?
+- [ ] Bước tiếp theo là gì cụ thể?
+- [ ] Có context đặc biệt nào cần biết không?
+
+### On Session Start
+
+1. Read `.doc/CLAUDE.md`
+2. Read `.doc/session/handoff.md`
+3. Read `.doc/session/current.md` (if unfinished work)
+4. Read `.doc/rules/` (all files)
+5. Ask: "Tôi đã đọc context. [Summary 2-3 dòng]. Bạn muốn tiếp tục từ đâu?"
 
 ### On Session End
 
-1. Summarize session into `.doc/session/archive/YYYY-MM-DD/session-N.md`
-2. Update `.doc/memory/project.md` if major changes
-3. Update `.doc/plan/history/` if plans completed
-4. Clear `.doc/session/active/current.md` or mark as complete
+1. Read `session/current.md`
+2. Extract: accomplished, decisions, issues, new rules, files changed
+3. Create `session/history/YYYY-MM-DD_HH-MM.md`
+4. Update `session/handoff.md`
+5. Reset `session/current.md`
+6. Update `.doc/CLAUDE.md` line "Last Updated"
 
 ---
 
 ## Step 6 — Plan Management
 
-### Creating a Plan
+### Create Plan
 
 When user requests a feature:
 
-1. Create draft: `.doc/plan/drafts/feature-name.md`
+`.doc/plan/drafts/<feature>.md`:
 ```markdown
 # Plan: {Feature Name}
+
+**Status**: DRAFT | APPROVED | IN_PROGRESS | COMPLETED
+**Created**: {date}
 
 ## Overview
 {Brief description}
@@ -437,25 +507,7 @@ When user requests a feature:
 ## Estimated Effort
 {time estimate}
 
-## Status
-- [x] Drafted
-- [ ] Approved
-- [ ] In Progress
-- [ ] Completed
-
 ## Agent Handoff
-{Detailed instructions for another agent to pick up}
-```
-
-2. Present to user for approval
-3. Move to `approved/` when confirmed
-4. Move to `history/` when completed
-
-### Agent Handoff Format
-
-```markdown
-## Agent Handoff
-
 You are implementing: {feature name}
 
 Context:
@@ -463,151 +515,125 @@ Context:
 - Tech stack: {stack}
 - Existing patterns: {patterns}
 
-Your task:
-{detailed task description}
-
-Files to modify:
-{list}
-
-Steps to follow:
-1. {step}
-2. {step}
-
-Rules:
-- {rule 1}
-- {rule 2}
-
-Verification:
-- {how to verify it works}
+Your task: {detailed description}
+Steps: 1. {step} 2. {step}
+Rules: {rule 1}, {rule 2}
+Verification: {how to verify}
 ```
 
----
-
-## Step 7 — Context Preservation
-
-### Cross-Session Continuity
-
-When continuing work after break:
-
-1. Read `.doc/memory/project.md`
-2. Read `.doc/session/archive/by-feature/{feature}.md`
-3. Check `.doc/plan/approved/` for active plans
-4. Ask user to confirm and continue
-
-### Cross-Machine Continuity
-
-When opening project on different machine:
-
-1. Sync `.doc/` via git (add to git if not already)
-2. Or manually copy `.doc/` folder
-3. Claude Code reads `.doc/memory/` first
-4. Understands full context immediately
+### Plan Flow
+1. Create in `drafts/` → present to user
+2. Move to `approved/` when confirmed
+3. Move to `completed/` when done
 
 ---
 
-## Step 8 — Auto-Save During Session
+## Step 7 — Quick Scripts
 
-### Save Points
+### save-session.sh
+
+```bash
+# Usage: ./.doc/scripts/save-session.sh "Title" "Content"
+```
+
+Quick save to current session without opening file.
+
+### archive-session.sh
+
+Archives current session and creates handoff.
+
+### setup-brain.sh
+
+Verifies/creates `.doc/` structure.
+
+---
+
+## Step 8 — Auto-Save Triggers
 
 After each significant action:
 
-1. **Feature implemented** → Update session + plan
-2. **Bug fixed** → Document fix pattern
-3. **Decision made** → Save to decisions log
-4. **Rule discovered** → Save to appropriate rule file
-
-### Quick Save Commands
-
-```
-"Save this" → Summarize + save to active session
-
-"Remember rule: {rule}" → Save to .doc/rule/custom/
-
-"Update plan: {changes}" → Update draft plan
-```
+1. **Feature implemented** → Update session + mark plan in progress
+2. **Bug fixed** → Document in `knowledge/issues/`
+3. **Decision made** → Save to decisions in session
+4. **Rule discovered** → Save to `rules/custom/`
+5. **New issue found** → Create in `knowledge/issues/`
 
 ---
 
 ## Usage Examples
 
-### First Time Setup
+### Init Brain
 ```
 User: /qd-brain init
-Claude: Initializing project brain...
-- Creating folder structure
-- Creating memory files
-- Creating git rules
-- Creating style rules
-Done. Run /qd-brain learn to analyze project structure.
+Claude: Initializing brain...
+- Creating .doc/ structure
+- Creating session files
+- Creating rules templates
+Done.
 ```
 
-### Learn Project
+### Analyze Patterns
+```
+User: /qd-brain analyze
+Claude: Analyzing git history...
+- Extracting commit patterns
+- Detecting file co-changes
+- Learning naming conventions
+Found: 150 commits, 80% follow conventional commits
+Updated: rules/git.md, rules/naming.md
+```
+
+### Learn Structure
 ```
 User: /qd-brain learn
-Claude: Learning project structure...
+Claude: Learning project...
 - Mapping directories
-- Analyzing code patterns
-- Extracting conventions
-- Generating AGENTS.md files
-Done. Project brain initialized.
-```
-
-### Generate Documentation
-```
-User: /qd-brain docs
-Claude: Generating AGENTS.md files...
-- Creating root AGENTS.md
-- Creating src/AGENTS.md
-- Creating src/components/AGENTS.md
-Done. Documentation generated.
-```
-
-### Save Session
-```
-User: save session
-Claude: Saving session...
-- Summarizing tasks completed
-- Saving decisions
-- Archiving to .doc/session/archive/
+- Analyzing code
+- Generating architecture.md
+- Creating AGENTS.md files
 Done.
+```
+
+### Save Quick
+```
+User: save
+Claude: Saving...
+✅ Saved decision: "Use Redis for cache"
 ```
 
 ### Continue Work
 ```
-User: continue the auth feature
-Claude: Reading context from .doc/...
-- Found active plan: auth-feature.md
-- Last session: implemented login
-- Next: implement logout
-Ready to continue.
-```
-
-### Learn New Rule
-```
-User: remember rule: always validate input at system boundaries
-Claude: Saved to .doc/rule/custom/validation.md
+User: continue
+Claude: Reading context...
+- Last work: implementing auth
+- Next: add refresh token
+Ready to continue? [y/n]
 ```
 
 ---
 
 ## Files to GitIgnore
 
-Add to `.gitignore`:
 ```gitignore
-.doc/session/active/
-.doc/agent/states/
-```
-
-Keep in git:
-```gitignore
-!.doc/session/archive/
+# Keep in git
+!.doc/session/history/
 !.doc/plan/
-!.doc/rule/
-!.doc/memory/
+!.doc/rules/
+!.doc/knowledge/
+!.doc/init/
+
+# Local only (don't commit)
+.doc/session/current.md
+.doc/session/handoff.md
 ```
 
 ---
 
 ## Source
 
-Combines hierarchical documentation (AGENTS.md), session memory, plan management, and rule learning into a unified second brain system.
+Combines:
+- `/skill-create` git history analysis patterns
+- `references/default-rules.md` git conventions
+- `references/init-templates.md` document templates
+- `references/session-format.md` session management
+- AGENTS.md generation from hierarchical documentation
