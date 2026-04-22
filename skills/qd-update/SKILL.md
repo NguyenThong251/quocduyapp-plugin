@@ -1,163 +1,229 @@
 ---
 name: qd-update
-description: Execute safe one-by-one dependency updates with research-first checks, verification-loop, language reviewer agents, optional TDD gates, and handoff to qd-debugging when runtime/dev errors appear.
+description: All-in-one dependency update workflow — research-first, verifies build+dev runtime, auto-detects known breaking patterns (Vite 8, redux-persist, circular deps), fixes found issues, delivers push/merge decision.
 triggers:
   - /qd-update
   - update package
-  - safe update
   - upgrade library
+  - dependency update
 ---
 
 # /qd-update
 
-Mot lan chi update 1 thu vien. Khong update nhieu package cung luc.
+**All-in-one.** Chi update 1 package/lan. Khong phai huong dan — lam tu dau den cuoi.
 
-## Core Integrations
+## Phase 1 — Intake
 
-- `build-error-resolver`: fix compile/build error sau update.
-- `typescript-reviewer` / `python-reviewer` / `go-reviewer`: review compatibility theo ngon ngu.
-- `requesting-code-review`: review truoc khi ket thuc update.
-- `verification-loop`: build, lint, typecheck, test lap lai sau moi thay doi.
-- `tdd-workflow`: tuy chon bat TDD gate de chong regression.
-- `ralph` persistence mode tu OMC: tiep tuc fix den khi qua gate hoac dat max-attempt policy.
+Doc `CHANGELOG_DEPENDENCY_UPDATE.md` neu co. Neu khong co, tu doc `package.json`.
 
-## Workflow (12 Phases)
+Xac nhan voi user:
+- Package + from version -> to version
+- Risk level (patch/minor/major)
+- Migration effort (none/minor/major)
 
-### Phase 1 - Intake and single confirmation
+Neu user khong xac nhan -> dung.
 
-Doc `CHANGELOG_DEPENDENCY_UPDATE.md`, xac nhan:
+## Phase 2 — Research
 
-- package name
-- from version -> to version
-- risk level
-- expected migration effort
+Truoc khi cham code:
 
-Neu user khong xac nhan, dung.
+1. Doc changelog cua package (npm/changelog url)
+2. Check breaking changes
+3. Check migration guide (codemod available?)
+4. Check known runtime issues (tra cuu memory project + common patterns ben duoi)
 
-### Phase 2 - Preflight (search-first)
+## Phase 3 — Pre-Detection (Auto)
 
-Research nhanh truoc khi cham code:
+Neu la Vite hoac React/React-DOM update:
 
-1. Breaking changes summary
-2. Migration guide
-3. Codemod availability
-4. Known runtime issues (dev server, syntax/runtime mismatch)
+### Vite update (bat ky version nao)
 
-### Phase 3 - Optional TDD gate
+Kiem tra `vite.config.js`:
+- Co `esbuildOptions` khong? -> Vite 8 se bao deprecated (Rolldown thay esbuild)
+- Co custom JS->JSX plugin trong `optimizeDeps.esbuildOptions` khong?
+  - `@vitejs/plugin-react` v6 tu xu ly -> remove plugin + `esbuildOptions`
+- **Action:** Neu co, migrate config truoc khi update
 
-Neu user bat `strict` hoac package risk la major:
+### React update
 
-1. Viet test reproducer cho critical flow.
-2. Chay test phai FAIL truoc (RED).
-3. Moi duoc update package.
+Check:
+- `redux-persist` co dung `import storage from "redux-persist/lib/storage"` khong?
+  - Fix: `storage: reduxStorage.default ?? reduxStorage`
+- `react-cookie` co dung pattern nao can kiem tra khong?
 
-Neu project khong co test infra: note ro "manual regression mode".
-
-### Phase 4 - Baseline snapshot
-
-Bat buoc:
+## Phase 4 — Branch + Baseline
 
 - Tao branch: `update/<package>-<from>-to-<to>`
-- Chay baseline build/test/lint/typecheck
-- Luu baseline artifacts logs
+  - Neu la major/high-risk update: tao branch test rieng, chi merge khi user xac nhan
+- Chay `yarn build` (hoac `npm run build`) -> luu baseline
 
-### Phase 5 - Update one library
+## Phase 5 — Update
 
-Chay dung command theo package manager.
+```bash
+# Node
+yarn add <package>@<version>        # dependencies
+yarn add -D <package>@<version>     # devDependencies
 
-Neu la major 2+ versions behind: chia phase incremental.
+# Python
+pip install --upgrade <package>
 
-### Phase 6 - Verification loop pass 1
+# Go
+go get <package>@latest
 
-Chay theo thu tu:
+# PHP
+composer update <package>
+```
 
-1. build
-2. typecheck
-3. lint
-4. tests
-5. dev runtime smoke check (neu la app co dev server)
+Neu major 2+ versions behind: incremental (VD: 1.0 -> 1.5 -> 2.0).
 
-Neu fail compile/build: chuyen Phase 7.
-Neu fail runtime/dev syntax: chuyen Phase 8.
+## Phase 6 — Verification Loop
 
-### Phase 7 - Compile/build fixer loop
+### Build
+```bash
+yarn build 2>&1 | tail -5
+```
 
-Khi build fail:
+### Dev server (neu la frontend/app)
+```bash
+timeout 15 yarn dev 2>&1 | head -20
+```
+Hoac bat dev server, check output xem co loi khong.
 
-1. Goi `build-error-resolver`.
-2. Apply fix nho nhat.
-3. Chay lai `verification-loop`.
-4. Lap toi da 3 lan.
+### Runtime check
+- Mo browser / check dev server output
+- Tim cac loi thuong gap:
+  - `Cannot access 'X' before initialization` -> circular dependency (xem Phase 3 detection)
+  - `storage.getItem is not a function` -> redux-persist ESM issue
+  - Module not found -> missing peer dependency
+  - Syntax error -> breaking API change
 
-Neu van fail, ho tro rollback/defer.
+## Phase 7 — Auto-Fix Common Patterns
 
-### Phase 8 - Runtime/dev debugging handoff
+Neu gap loi, check theo thu tu:
 
-Khi build pass nhung dev runtime loi (syntax/API mismatch):
+### Circular Dependency (Vite 8 Rolldown)
 
-1. Thu thap log (`dev-server.log`, stack traces).
-2. Run `/qd-debugging` voi package context + log.
-3. Sau khi qd-debugging fix, quay lai Phase 6 verification-loop.
+**Dau hieu:** `Cannot access 'X' before initialization` o JSX file, build pass nhung dev runtime fail.
 
-### Phase 9 - Language reviewer pass
+**Root cause:** Vite 8 Rolldown evaluate modules stricter. Pattern thuong gap:
 
-Chon reviewer theo codebase:
+File A top-level imports File B, File B imports File C, File C imports function tu File A.
 
-- TS/JS: `typescript-reviewer`
-- Python: `python-reviewer`
-- Go: `go-reviewer`
+**Fix:** Move static imports + usage object vao trong function (lazy evaluate):
 
-Muc tieu:
+```js
+// CU (bi TDZ)
+import { X } from "./X";
+const map = { x: X };
+export const Config = () => { /* dung map */ };
 
-- API compatibility
-- silent breakage
-- typing/runtime mismatch
-- migration anti-pattern
+// Moi (lazy)
+export const Config = () => {
+  const { X } = require("./X"); // hoac async import()
+  const map = { x: X };
+  // ...
+};
+```
 
-### Phase 10 - Requesting code review (global)
+### redux-persist Storage (Vite 8 ESM)
 
-Sau language reviewer, chay them flow `requesting-code-review` de co final feedback truoc khi ket.
+**Dau hieu:** `storage.getItem is not a function`
 
-### Phase 11 - Final gate and decision
+**Fix:**
+```js
+// Cu
+import storage from "redux-persist/lib/storage";
 
-Chi coi la pass khi:
+// Moi
+import reduxStorage from "redux-persist/lib/storage";
+const persistConfig = { storage: reduxStorage.default ?? reduxStorage };
+```
 
-- build/type/lint/test pass
-- dev runtime check pass (neu applicable)
-- reviewer findings critical da duoc xu ly
+### Vite esbuildOptions deprecated
 
-Sau do hoi 1 cau:
+**Dau hieu:** `You or a plugin you are using have set optimizeDeps.esbuildOptions but this option is now deprecated`
 
-- `push` -> commit/push
-- `rollback` -> revert lockfile + dependency changes
-- `defer` -> luu backlog
+**Fix:**
+```js
+// Cu
+optimizeDeps: {
+  esbuildOptions: { plugins: [...], loader: { ".js": "jsx" } },
+},
 
-### Phase 12 - Report
+// Moi
+optimizeDeps: {
+  include: [], // hoac scoped deps
+},
+// @vitejs/plugin-react v6+ tu xu ly JS->JSX
+```
 
-Output bat buoc:
+### Peer Dependency
 
-- version updated
-- issues da gap va cach fix
-- logs/chung cu verification
-- reviewer summary
-- next recommended package
+**Dau hieu:** `unmet peer dependency` warnings
 
-## RALPH-style persistence policy
+**Fix:** Install them:
+```bash
+yarn add <peer-package>
+```
 
-Khi gap loi kho:
+## Phase 8 — Language Review (Auto)
 
-- Khong bo cuoc som.
-- Lap analysis -> fix -> verify theo vong.
-- Moi vong phai co evidence moi.
-- Dung khi:
-  - pass het gates, hoac
-  - dat max attempts va user chon rollback/defer.
+- TS/JS: goi `typescript-reviewer`
+- Python: goi `python-reviewer`
+- Go: goi `go-reviewer`
+
+Review: API compatibility, silent breakage, typing issues.
+
+## Phase 9 — Final Verification
+
+- `yarn build` pass
+- `yarn dev` pass (khong loi)
+- Khong con errors cung loai
+
+## Phase 10 — Decision
+
+Neu test branch (VD: update/vite-8-phase2):
+- `merge` -> merge vao ai-dev + push + xoa branch
+- `rollback` -> git checkout ai-dev + yarn install + xoa branch
+
+Neu working branch:
+- `push` -> commit + push
+
+Moi truong hop deu xoa `dist/`, cleanup.
+
+## Phase 11 — Report
+
+Output:
+- Package updated: X Y -> Z
+- Issues found + fixes
+- Verification evidence (build time, dev output)
+- Next recommended package
+
+## Common Breaking Patterns (Built-in Knowledge)
+
+### Node/Vite Projects
+
+| Pattern | Dau hieu | Fix |
+|---------|----------|-----|
+| Vite 8 esbuildOptions deprecated | Warning "deprecated" | Remove, dùng Rolldown |
+| redux-persist ESM | `storage.getItem is not a function` | `reduxStorage.default ?? reduxStorage` |
+| Circular TDZ (Vite 8 stricter) | `Cannot access X before init` | Lazy require/import trong function |
+| ESLint 10 flat config | `.eslintrc.*` not supported | Migrate to `eslint.config.js` |
+| React 19 new hooks API | Hook warnings/errors | Check react-dom version match |
+| ant-design v5->v6 | ConfigProvider/Form API | Check changelog |
+
+### Python Projects
+
+| Pattern | Dau hieu | Fix |
+|---------|----------|-----|
+| Django 4.0+ | `STATICFILES` removed | Update settings |
+| FastAPI 0.100+ | Pydantic v2 | `from pydantic import` changes |
+| SQLAlchemy 2.0 | ORM patterns | Async session changes |
 
 ## Rules
 
-- Luon 1 package/lan.
-- Khong bo qua verification-loop.
-- Khong skip runtime/dev check cho frontend/app.
-- Build fail thi uu tien build-error-resolver.
-- Runtime fail thi handoff sang `/qd-debugging`.
+- 1 package/lan.
+- Build pass + dev runtime pass = mo gate.
+- Runtime fail -> fix theo common patterns -> restart verification.
+- Major update -> test branch rieng.
 - Luon co rollback path.

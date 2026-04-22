@@ -1,148 +1,205 @@
 ---
 name: qd-debugging
-description: All-in-one debugging workflow for any project issue (build, runtime, test, syntax, integration) with log-driven root cause analysis, systematic debugging phases, and verification-before-completion gates.
+description: Universal all-in-one debugger for any project, language, or framework. Detects error category, traces root cause, applies minimal fix, verifies. Covers build, runtime, test, config, integration, and dependency issues.
 triggers:
   - /qd-debugging
-  - debug after update
-  - fix build error
-  - fix runtime error
-  - analyze error log
+  - debug
+  - fix error
+  - analyze error
+  - troubleshooting
 ---
 
 # /qd-debugging
 
-Skill debug tong quat, khong gioi han chi cho dependency update.
+**Universal debugger.** Lam tu dau den cuoi, khong phai huong dan. Doc error, trace root cause, fix, verify.
 
-## Input modes
+Khong co gi la "case moi" — chi co "pattern" va "chua biet pattern nao".
 
-Ho tro 2 kieu dau vao:
+## Step 1 — Thu Thap Error
 
-1. User mo ta loi + command bi fail.
-2. User cung cap file log/error dump.
+Thu thap TU NHIEU NGUON:
+- Dev server output
+- Build log (`yarn build 2>&1`, `npm run build 2>&1`)
+- Browser console / network tab
+- Stack trace (neu co)
+- Git diff gan day (`git diff HEAD~3 --stat`)
 
-Neu co log file, uu tien parse log truoc.
+Tra cuu memory project (neu co) xem co gap loi tuong tu chua.
 
-## Integrated Patterns
+**Dieu quan trong:** Doc error TU NHIEU LAN cho den khi hieu CHAN error do gi.
 
-- `systematic-debugging`: root-cause truoc, khong fix doan.
-- `verification-before-completion`: khong bao done neu chua co evidence moi.
-- `test-driven-development`: khi sua bug quan trong, tao reproducer test.
-- OMC multi-agent style: co the chia nhiem vu song song (breaking-change analyst, compile fixer, test runner).
-- Ralph persistence mindset: lap fix-den-khi-qua gate (co max-attempt policy).
+## Step 2 — Phan Loai Error
 
-## 11-Phase Debug Flow
+| Category | Dau hieu | Thu tu fix |
+|----------|----------|-----------|
+| **Module resolution** | `Module not found`, `Cannot find module` | 1 |
+| **Type/compile** | `SyntaxError`, `TypeError`, `Cannot read` | 2 |
+| **Dependency conflict** | `peer dep`, `version mismatch`, `EPERM` | 3 |
+| **Config/ESM** | `default export`, `import/export`, `__esModule` | 4 |
+| **Runtime/circular** | `Cannot access X before init`, `undefined is not a function` | 5 |
+| **Network/async** | `timeout`, `fetch failed`, `ECONNREFUSED` | 6 |
+| **Logic/regression** | Sai ket qua,khong hien thi, loi business logic | 7 |
+| **Permission/OS** | `EPERM`, `EACCES`, `ENOENT` | 8 |
 
-### Phase 1 - Problem framing
+## Step 3 — Trace Root Cause (Systematic)
 
-Xac dinh:
+**Khong du doan.** Chung minh.
 
-- symptom
-- expected behavior
-- impact scope
-- reproducibility
+### Khi khong biet loi gi
 
-### Phase 2 - Evidence collection
+1. Git diff: `git diff HEAD~1 --stat` xem thay doi gan nhat
+2. Thay doi gi -> loi do day
+3. Revert thu -> loi消失 khong
+4. Thay doi thu -> loi消失 khong
 
-Thu thap:
+### Khi biet loi nhung khong biet tai sao
 
-- stack trace
-- build log
-- test output
-- dev server log
-- git diff gan day
+1. Doc file loi (exact line)
+2. Trace xem gia tri do tu dau den
+3. Log/console gia tri tai diem do
+4. Thay doi gia tri -> loi het/chet?
 
-Khong de xuat fix truoc khi co evidence.
+### Khi biet root cause nhung khong biet fix nao
 
-### Phase 3 - Error classification
+1. Tim file/chu thu tuong tu trong codebase (pattern matching)
+2. Tim project / repo tuong tu tren GitHub xem ho fix the nao
+3. Tim docs/changelog cua package do
 
-Phan loai:
+## Step 4 — Apply Fix
 
-- compile/build error
-- runtime error
-- syntax error
-- type error
-- test regression
-- integration/config error
+**Minimal first.** Fix nho nhat co the, verify truoc khi tiep tuc.
 
-### Phase 4 - Root cause hypothesis
+**Rule:** 1 fix + 1 verification = 1 round.
 
-Voi moi huong nghi ngo:
+### Common Patterns by Category
 
-1. ghi ro hypothesis
-2. chay 1 test nho de xac minh
-3. loai bo neu khong dung
+#### Module Resolution
+```
+Khong tim thay file -> kiem tra:
+  - import path dung chua (case sensitive tren Linux)
+  - file extension dung chua (.js vs .jsx)
+  - package nao export file do (main/module field)
+  - alias path trong config (vite.config.js, tsconfig.json)
+```
 
-### Phase 5 - Parallel specialist dispatch (optional)
+#### Dependency Conflict
+```
+peer dep unmet -> yarn add <package>
+EPERM lock file -> taskkill + retry
+version mismatch -> kiem tra package.json vs lockfile
+npm ERR -> xoa node_modules + lockfile + yarn install
+```
 
-Neu task lon/co nhieu nhom loi, cho phep chia:
+#### Config/ESM
+```
+default export undefined -> thu .default hoac ?? export
+__esModule namespace -> destructuring dung: obj.default ?? obj
+import.meta.url undefined -> kiem tra bundler config
+```
+VD: redux-persist ESM -> `reduxStorage.default ?? reduxStorage`
 
-- agent A: check breaking changes / docs mismatch
-- agent B: fix compile/type errors
-- agent C: run tests + summarize failures
+#### Runtime/Circular
+```
+Cannot access X before init -> co circular import
+  - Move usage cua X vao function (lazy require)
+  - Hoac break chain bang refactor
+undefined is not a function -> function chua defined
+  - Kiem tra import dung chua
+  - Kiem tra export co ton tai khong
+```
 
-### Phase 6 - Minimal fix implementation
+#### Network/Async
+```
+fetch failed -> kiem tra server dang chay chua
+  - curl localhost:<port>
+  - proxy config dung khong
+ECONNREFUSED -> port bi chiếm
+  - taskkill process dang dung port do
+```
 
-Fix tai goc loi, khong chua symptom.
-Moi lan chi thay doi nho, de verify duoc.
+#### Permission/OS
+```
+EPERM unlink -> process dang lock file
+  - Windows: tasklist | grep <process>
+  - Close file handlers
+ENOENT -> duong dan khong ton tai
+  - Kiem tra path (case, slash, typo)
+```
 
-### Phase 7 - Verification loop
+## Step 5 — Verification
 
-Sau moi fix:
+Sau fix:
 
-1. re-run command loi ban dau
-2. build/type/lint/test lien quan
-3. runtime smoke check (neu app)
+1. Re-run command bi fail
+2. Build pass
+3. Dev server pass (neu app)
+4. Check error da消失 trong output moi
 
-### Phase 8 - TDD reinforcement (recommended)
+**Neu loi chua het:** quay lai Step 1, nhan dien loi moi.
 
-Neu bug co kha nang tai dien:
+## Step 6 — Iterate
 
-1. viet failing test (RED)
-2. fix de GREEN
-3. giu test de chan regression
+Lap: fix -> verify -> fix tiep neu can.
 
-### Phase 9 - Completion gate
+Dung khi:
+- Het loi -> pass
+- Dat 3 attempts -> dung, bao cao root cause + defer/workaround
 
-Chi duoc ket luan "fixed" khi:
+## Step 7 — Report
 
-- command fail ban dau da pass
-- khong con error cung loai trong logs moi
-- co output verification moi (fresh run)
+Output:
+```
+Error: <exact error message>
+Category: <phan loai>
+Root cause: <giai thich ro rang>
+Fix applied: <file + change>
+Verification: <build time, output>
+Remaining risk: <neu co>
+```
 
-### Phase 10 - Recovery options
+## Universal Checklist
 
-Neu dat max attempts ma chua pass:
+Khi gap error bat ky:
+- [ ] Doc full error message — khong chi nhin error type
+- [ ] Doc stack trace — biet exactly tai cho nao
+- [ ] Git diff — thay doi gi gan nhat?
+- [ ] Restart dev server — loi co biet?
+- [ ] Clear cache (`node_modules/.vite`, `.next`, `__pycache__`) — loi con?
+- [ ] Reinstall deps (`yarn install`, `pip install`) — loi con?
 
-- rollback
-- defer voi known workaround
-- tach nho scope de debug tiep
+## Ecosystem-Specific Reminders
 
-### Phase 11 - Debug report
+### Node/Vite/React
+- `esbuildOptions deprecated` -> Vite 8 Rolldown
+- `redux-persist` ESM -> check default export
+- Circular TDZ -> lazy require/import
+- EPERM -> kill process
 
-Output bat buoc:
+### Python/Django
+- `ModuleNotFoundError` -> kiem tra venv activated
+- Migration error -> `python manage.py makemigrations`
+- Import cycle -> `from .module import` thay vi `import module`
 
-- Observed failure
-- Root cause
-- Evidence
-- Fix da ap dung
-- Verification evidence
-- Remaining risk (neu co)
+### Go
+- `undefined: xxx` -> missing import
+- `import cycle not allowed` -> refactor interface
+- `cannot find package` -> `go mod tidy`
 
-## Error-log-first protocol
+### .NET/C#
+- `CS0246` -> missing using/namespace
+- `NU1603` -> NuGet package version warning
+- `MSB4018` -> dotnet restore / clean
 
-Neu user dua log file:
-
-1. parse top 3 error signatures
-2. map signature -> likely root cause cluster
-3. uu tien fix theo thu tu:
-   - syntax/parse blockers
-   - missing module/import errors
-   - type/API mismatch
-   - business logic regression
+### PHP/Laravel
+- `Class not found` -> `composer dump-autoload`
+- `Target class does not exist` -> kiem tra service provider
+- `Missing required parameters` -> kiem tra .env
 
 ## Rules
 
-- Khong fix khi chua root-cause analysis.
-- Khong claim complete khi chua re-run verification.
-- Uu tien reproducible steps.
-- Luon de lai rollback/defer option neu khong close duoc trong budget.
+- Doc error nhieu lan, fix sau.
+- Khong fix khi chua trace root cause.
+- 1 fix + 1 verify = 1 round.
+- Error bat ky deu co root cause — chi can tim ra.
+- Khi khong biet -> git diff + revert thu.
+- De cuoi: backup roi moi fix.
